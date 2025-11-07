@@ -1,0 +1,19 @@
+services:
+  api-liquidity-provider:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      network: host
+    container_name: api-liquidity-provider
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app:delegated
+    working_dir: /app
+    network_mode: "host"
+
+volumes:
+  mongo_data:
