@@ -34,7 +34,28 @@ ABI_VAULT = [
         {"type":"uint256","name":"amountIn"},
         {"type":"uint256","name":"amountOutMinimum"},
         {"type":"uint160","name":"sqrtPriceLimitX96"}
-    ],"stateMutability":"nonpayable","type":"function"}
+    ],"stateMutability":"nonpayable","type":"function"},
+    {
+        "name": "unstakeExitSwapAndOpenPancake",
+        "outputs": [
+            {"type": "uint256", "name": "amountOut"},
+            {"type": "uint256", "name": "newTokenId"},
+            {"type": "uint128", "name": "newLiq"}
+        ],
+        "inputs": [
+            {"type":"address","name":"router"},
+            {"type":"address","name":"tokenIn"},
+            {"type":"address","name":"tokenOut"},
+            {"type":"uint24","name":"fee"},
+            {"type":"uint256","name":"amountIn"},
+            {"type":"uint256","name":"amountOutMinimum"},
+            {"type":"uint160","name":"sqrtPriceLimitX96"},
+            {"type":"int24","name":"newLower"},
+            {"type":"int24","name":"newUpper"}
+        ],
+        "stateMutability":"nonpayable",
+        "type":"function"
+    }
 ]
 
 U128_MAX = (1<<128) - 1
@@ -218,6 +239,35 @@ class PancakeV3Adapter(DexAdapter):
             int(sqrt_price_limit_x96 or 0)
         )
 
+    def fn_batch_unstake_exit_swap_open_pancake(
+        self,
+        router: str,
+        token_in: str,
+        token_out: str,
+        fee: int,
+        amount_in_raw: int,
+        min_out_raw: int,
+        sqrt_price_limit_x96: int,
+        lower_tick: int,
+        upper_tick: int,
+    ):
+        """
+        Build tx for vault.unstakeExitSwapAndOpenPancake(...).
+        """
+        if hasattr(self.vault.functions, "unstakeExitSwapAndOpenPancake"):
+            return self.vault.functions.unstakeExitSwapAndOpenPancake(
+                Web3.to_checksum_address(router),
+                Web3.to_checksum_address(token_in),
+                Web3.to_checksum_address(token_out),
+                int(fee),
+                int(amount_in_raw),
+                int(min_out_raw),
+                int(sqrt_price_limit_x96 or 0),
+                int(lower_tick),
+                int(upper_tick),
+            )
+        raise NotImplementedError("Vault missing unstakeExitSwapAndOpenPancake")
+    
     # ---------- farms (MasterChefV3) ----------
     def fn_stake(self):
         """Stake via Vault.stake() -> adapter.stakePosition(gauge)."""

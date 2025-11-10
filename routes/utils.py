@@ -145,8 +145,5 @@ def resolve_pool_from_vault(v: dict, pool_override: Optional[str]) -> str:
             raise HTTPException(400, f"swap_pools key not found: {pool_override}")
         return Web3.to_checksum_address(sp["pool"])
 
-    # default: tente "AERO_USDC"
-    sp = (v.get("swap_pools") or {}).get("AERO_USDC")
-    if not sp or str(sp.get("dex")).lower() != "uniswap":
-        raise HTTPException(400, "Missing swap_pools.AERO_USDC with dex='uniswap' or pass pool_override")
-    return Web3.to_checksum_address(sp["pool"])
+    # default: pool normal
+    return Web3.to_checksum_address(v["pool"])

@@ -66,3 +66,5 @@ docker/*.env
 docker/*.log
 
 apps/api-signals/mongo_data/*
+
+out/*
