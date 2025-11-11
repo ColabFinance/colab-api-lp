@@ -146,6 +146,12 @@ class RewardsCollectedCum(BaseModel):
     usdc_raw: int
     usdc: float
 
+class GaugeRewards(BaseModel):
+    reward_token: str
+    reward_symbol: str
+    pending_raw: int
+    pending_amount: float
+    pending_usd_est: float
 
 class StatusCore(BaseModel):
     tick: int
@@ -157,7 +163,7 @@ class StatusCore(BaseModel):
     cooldown_remaining_seconds: int
     cooldown_active: bool
     prices: PricesPanel
-    gauge_rewards: Optional[dict]
+    gauge_rewards: GaugeRewards
     gauge_reward_balances: Optional[dict] = None
     rewards_collected_cum: RewardsCollectedCum = RewardsCollectedCum(usdc_raw=0, usdc=0.0)
     fees_uncollected: FeesUncollected

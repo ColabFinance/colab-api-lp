@@ -88,6 +88,17 @@ def snapshot_status(adapter, dex: str, alias: str) -> dict:
             "token1": core.holdings.totals.token1,
             "usd": core.holdings.totals.usd,
         },
+        "gauge_rewards": {
+            "reward_token": core.gauge_rewards.reward_token,
+            "reward_symbol": core.gauge_rewards.reward_symbol,
+            "pending_raw": core.gauge_rewards.pending_raw,
+            "pending_amount": core.gauge_rewards.pending_amount,
+            "pending_usd_est": core.gauge_rewards.pending_usd_est
+        },
+        "rewards_collected_cum": {
+            "usdc_raw": core.rewards_collected_cum.usdc_raw,
+            "usdc": core.rewards_collected_cum.usdc
+        },
         "fees_uncollected": {
             "token0": core.fees_uncollected.token0,
             "token1": core.fees_uncollected.token1,
