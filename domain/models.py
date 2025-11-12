@@ -163,7 +163,7 @@ class StatusCore(BaseModel):
     cooldown_remaining_seconds: int
     cooldown_active: bool
     prices: PricesPanel
-    gauge_rewards: GaugeRewards
+    gauge_rewards: Optional[GaugeRewards] = None
     gauge_reward_balances: Optional[dict] = None
     rewards_collected_cum: RewardsCollectedCum = RewardsCollectedCum(usdc_raw=0, usdc=0.0)
     fees_uncollected: FeesUncollected

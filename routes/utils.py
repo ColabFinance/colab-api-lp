@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from fastapi import HTTPException
 from web3 import Web3
 from domain.models import StatusCore
-from services.chain_reader import USD_SYMBOLS, compute_status, sqrtPriceX96_to_price_t1_per_t0
+from services.chain_reader import USD_SYMBOLS, _is_stable_addr,_is_usd_symbol, compute_status, sqrtPriceX96_to_price_t1_per_t0
 from adapters.aerodrome import AerodromeAdapter
 from config import get_settings
 
@@ -158,3 +158,6 @@ def resolve_pool_from_vault(v: dict, pool_override: Optional[str]) -> str:
 
     # default: pool normal
     return Web3.to_checksum_address(v["pool"])
+
+def _is_usd(sym: str, addr: str) -> bool:
+    return _is_usd_symbol(sym) or _is_stable_addr(addr)

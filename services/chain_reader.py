@@ -221,7 +221,6 @@ def compute_status(adapter, dex, alias: str) -> StatusCore:
     token_id = int(vstate.get("tokenId", 0) or 0)
 
     gauge_rewards_block = None
-
     if has_gauge and token_id != 0:
         try:
             if dex == "pancake":
@@ -285,10 +284,20 @@ def compute_status(adapter, dex, alias: str) -> StatusCore:
                 }
         except Exception as e:
             gauge_rewards_block = {
-                "error": f"gauge_read_failed: {str(e)}"
-            }
+                    "reward_token": "",
+                    "reward_symbol": "",
+                    "pending_raw": 0,
+                    "pending_amount": 0,
+                    "pending_usd_est": 0,
+                }
     else:
-        gauge_rewards_block = None
+        gauge_rewards_block = {
+                    "reward_token": "",
+                    "reward_symbol": "",
+                    "pending_raw": 0,
+                    "pending_amount": 0,
+                    "pending_usd_est": 0,
+                }
     
     
     gauge_reward_balances = None

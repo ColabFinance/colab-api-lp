@@ -1,5 +1,6 @@
 from decimal import Decimal
 import json
+import math
 import logging
 import time
 from pathlib import Path
@@ -9,7 +10,7 @@ from web3 import Web3
 
 from config import get_settings
 from domain.pancake_batch_request import PancakeBatchRequest
-from routes.utils import ZERO_ADDR, estimate_eth_usd_from_pool, normalize_swap_pools_input, resolve_pool_from_vault, snapshot_status, tick_spacing_candidates
+from routes.utils import ZERO_ADDR, _is_usd,estimate_eth_usd_from_pool, normalize_swap_pools_input, resolve_pool_from_vault, snapshot_status, tick_spacing_candidates
 
 from domain.swap import SwapExactInRequest, SwapQuoteRequest
 from domain.models import (
@@ -20,7 +21,7 @@ from domain.models import (
 from services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
 from services import state_repo, vault_repo
 from services.tx_service import TxService
-from services.chain_reader import USD_SYMBOLS, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
+from services.chain_reader import USD_SYMBOLS, _is_usd_symbol, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
 from adapters.pancake_v3 import PancakeV3Adapter
 from adapters.uniswap_v3 import UniswapV3Adapter
 from adapters.aerodrome import AerodromeAdapter
@@ -127,6 +128,8 @@ def open_position(dex: str, alias: str, req: OpenRequest):
     meta = ad.pool_meta()
     dec0 = int(meta["dec0"])
     dec1 = int(meta["dec1"])
+    sym0, sym1 = meta["sym0"], meta["sym1"]
+    t0, t1 = meta["token0"], meta["token1"]
     spacing = int(meta.get("spacing") or cons.get("tickSpacing") or 0)
 
     # -------- owner check
@@ -165,14 +168,53 @@ def open_position(dex: str, alias: str, req: OpenRequest):
                 400,
                 "You must provide either (lower_tick and upper_tick) OR (lower_price and upper_price)."
             )
-        lower_tick = price_to_tick(float(req.lower_price), dec0, dec1)
-        upper_tick = price_to_tick(float(req.upper_price), dec0, dec1)
+        
+        # preço spot de referência (p_t1_t0)
+        sqrtP, spot_tick = ad.slot0()
+        p_ref = sqrtPriceX96_to_price_t1_per_t0(sqrtP, dec0, dec1)  # p_t1_t0
+        
+        def _canon_to_t1_per_t0(p_in: float) -> float:
+            """
+            Normaliza preço de entrada para p_t1_t0.
+            Heurísticas:
+              - Se token0 é USD-like e token1 não, o natural do usuário é USDC por cripto (p_t0_t1).
+                Se p_in for claramente muito maior que p_ref (ordens de grandeza), inverta.
+              - Caso contrário, se divergir > 10^4 de p_ref, tente inverter.
+            """
+            if p_in <= 0: raise HTTPException(400, "Price must be positive.")
+            token0_is_usd = _is_usd(sym0, t0)
+            token1_is_usd = _is_usd(sym1, t1)
+
+            p = float(p_in)
+            # caso comum USDC/CRYPTO: usuário passa USDC por 1 CRYPTO (grande), precisamos inverter
+            if token0_is_usd and not token1_is_usd:
+                if p_ref > 0:
+                    # p_ref típico é pequeno (≈ 1/100k p/ BTC); se p >> p_ref, inverta
+                    if abs(math.log10(p / max(p_ref, 1e-18))) > 4:
+                        return 1.0 / p
+                # fallback simples
+                if p > 50:  # 50 USD por unidade já indica p_t0_t1
+                    return 1.0 / p
+
+            # caso CRYPTO/USDC (token1 USD): usuário normalmente já fornece p_t1_t0
+            # ainda assim, se claramente invertido, corrija
+            if p_ref > 0 and abs(math.log10(p / max(p_ref, 1e-18))) > 6:
+                inv = 1.0 / p
+                # escolha a variante mais próxima do spot
+                return inv if abs(math.log10(inv / p_ref)) < abs(math.log10(p / p_ref)) else p
+
+            return p
+        
+        lp = _canon_to_t1_per_t0(float(req.lower_price))
+        up = _canon_to_t1_per_t0(float(req.upper_price))
+
+        lower_tick = price_to_tick(lp, dec0, dec1)
+        upper_tick = price_to_tick(up, dec0, dec1)
+        
 
     # garantir ordem asc (lower < upper)
     if lower_tick > upper_tick:
-        tmp = lower_tick
-        lower_tick = upper_tick
-        upper_tick = tmp
+        lower_tick, upper_tick = upper_tick, lower_tick
 
     # alinhar pro múltiplo de spacing
     if spacing:
@@ -675,13 +717,6 @@ def collect(dex: str, alias: str, req: CollectRequest):
     # human amounts
     pre_fees0 = float(fees0_raw) / (10 ** dec0)
     pre_fees1 = float(fees1_raw) / (10 ** dec1)
-
-    # --- USD/USDC conversion rule (same as compute_status)
-    def _is_usd_symbol(sym: str) -> bool:
-        try:
-            return sym.upper() in {"USDC", "USDBC", "USDCE", "USDT", "DAI", "USDD", "USDP", "BUSD"}
-        except Exception:
-            return False
 
     if _is_usd_symbol(sym1):
         pre_fees_usd = pre_fees0 * p_t1_t0 + pre_fees1
@@ -2516,29 +2551,61 @@ def pancake_batch_unstake_exit_swap_open(alias: str, req: PancakeBatchRequest):
     sym1 = meta["sym1"]
     spacing = int(meta.get("spacing") or 0)
 
+    def _is_usdc(sym: str) -> bool:
+        return sym.upper() in USD_SYMBOLS
+
+    def _is_eth(sym: str) -> bool:
+        return sym.upper() in {"WETH", "ETH"}
+    
+    def _ui_price_to_p_t1_t0(ui_price: float, sym0: str, sym1: str) -> float:
+        """
+        Converte o preço humano (geralmente 'USDC por RISCO') para p_t1_t0 (token1 per token0) exigido por price_to_tick.
+        - Se token1 é USD-like, o preço humano já está em p_t1_t0.
+        - Se token0 é USD-like (caso USDC/BTC), então o preço humano é p_t0_t1 => inverter.
+        - Caso nenhum seja estável, assume que o usuário forneceu p_t1_t0 já na convenção do pool.
+        """
+        if _is_usdc(sym1):
+            return float(ui_price)                  # já é p_t1_t0
+        if _is_usdc(sym0):
+            return 1.0 / float(ui_price)            # humano = p_t0_t1 -> inverte
+        return float(ui_price)                      # fallback
+
     lower_tick = req.lower_tick
     upper_tick = req.upper_tick
 
     if lower_tick is None or upper_tick is None:
-        # must come from prices
         if req.lower_price is None or req.upper_price is None:
             raise HTTPException(
                 400,
                 "You must provide either (lower_tick and upper_tick) OR (lower_price and upper_price)."
             )
-        lower_tick = price_to_tick(float(req.lower_price), dec0, dec1)
-        upper_tick = price_to_tick(float(req.upper_price), dec0, dec1)
+        pL = _ui_price_to_p_t1_t0(float(req.lower_price), sym0, sym1)
+        pU = _ui_price_to_p_t1_t0(float(req.upper_price), sym0, sym1)
 
-    # order + align spacing
+        lower_tick = price_to_tick(pL, dec0, dec1)
+        upper_tick = price_to_tick(pU, dec0, dec1)
+
+    # garantir ordem ascendente
     if lower_tick > upper_tick:
         lower_tick, upper_tick = upper_tick, lower_tick
 
+    # alinhar por spacing com floor/ceil (robusto)
     if spacing:
-        if lower_tick % spacing != 0:
-            lower_tick = int(round(lower_tick / spacing) * spacing)
-        if upper_tick % spacing != 0:
-            upper_tick = int(round(upper_tick / spacing) * spacing)
+        def align_floor(t: int, s: int) -> int:
+            r = t % s
+            return t - r
+        def align_ceil(t: int, s: int) -> int:
+            r = t % s
+            return t if r == 0 else t + (s - r)
 
+        lower_tick = align_floor(int(lower_tick), spacing)
+        upper_tick = align_ceil(int(upper_tick), spacing)
+
+    # evitar colapso
+    if lower_tick == upper_tick:
+        lower_tick -= spacing or 1
+        upper_tick += spacing or 1
+        
     # basic width guard (keep same as open/rebalance semantics if you have constraints)
     cons = ad_vault.vault_constraints() if hasattr(ad_vault, "vault_constraints") else {}
     width = abs(int(upper_tick) - int(lower_tick))
@@ -2550,12 +2617,6 @@ def pancake_batch_unstake_exit_swap_open(alias: str, req: PancakeBatchRequest):
     # ------- Resolve amount_in (token vs USD) same as /swap/exact-in --------
     dec_in = int(ad_vault.erc20(req.token_in).functions.decimals().call())
     dec_out = int(ad_vault.erc20(req.token_out).functions.decimals().call())
-
-    def _is_usdc(sym: str) -> bool:
-        return sym.upper() in USD_SYMBOLS
-
-    def _is_eth(sym: str) -> bool:
-        return sym.upper() in {"WETH", "ETH"}
 
     meta_swap = ad_pc.pool_meta()
     sym0_s, sym1_s = meta_swap["sym0"], meta_swap["sym1"]
@@ -2684,11 +2745,9 @@ def pancake_batch_unstake_exit_swap_open(alias: str, req: PancakeBatchRequest):
             fees1_raw = int(fees1_h * (10 ** dec1))
 
             prices_before = (before or {}).get("prices") or {}
-            p_t1_t0 = float(prices_before.get("p_t1_t0") or 0.0)
-            p_t0_t1 = float(
-                prices_before.get("p_t0_t1")
-                or ((1.0 / p_t1_t0) if p_t1_t0 else 0.0)
-            )
+            cur = prices_before.get("current", {}) or {}
+            p_t1_t0 = float(cur.get("p_t1_t0") or 0.0)
+            p_t0_t1 = (0.0 if p_t1_t0 == 0.0 else 1.0 / p_t1_t0)
 
             if _is_usdc(sym1):
                 pre_fees_usd = fees0_h * p_t1_t0 + fees1_h
@@ -2761,7 +2820,7 @@ def pancake_batch_unstake_exit_swap_open(alias: str, req: PancakeBatchRequest):
 
     return {
         "tx": send_res["tx_hash"],
-        "tick_spacing_used": int(fee_used),
+        "tick_spacing_used": int(spacing),
         "resolved_amount_mode": resolved_mode,
         "amount_in_raw": int(amount_in_raw),
         "quoted_out_raw": int(amount_out_raw),
