@@ -89,11 +89,16 @@ def snapshot_status(adapter, dex: str, alias: str) -> dict:
             "usd": core.holdings.totals.usd,
         },
         "gauge_rewards": {
-            "reward_token": core.gauge_rewards.reward_token,
-            "reward_symbol": core.gauge_rewards.reward_symbol,
-            "pending_raw": core.gauge_rewards.pending_raw,
-            "pending_amount": core.gauge_rewards.pending_amount,
-            "pending_usd_est": core.gauge_rewards.pending_usd_est
+            "reward_token": core.gauge_rewards.reward_token if core.gauge_rewards else None,
+            "reward_symbol": core.gauge_rewards.reward_symbol if core.gauge_rewards else None,
+            "pending_raw": core.gauge_rewards.pending_raw if core.gauge_rewards else None,
+            "pending_amount": core.gauge_rewards.pending_amount if core.gauge_rewards else None,
+            "pending_usd_est": core.gauge_rewards.pending_usd_est if core.gauge_rewards else None
+        },
+        "gauge_reward_balances": {
+            "symbol": core.gauge_reward_balances["symbol"] if core.gauge_reward_balances else None,
+            "in_vault_raw": core.gauge_reward_balances["in_vault_raw"] if core.gauge_reward_balances else None,
+            "in_vault": core.gauge_reward_balances["in_vault"] if core.gauge_reward_balances else None
         },
         "rewards_collected_cum": {
             "usdc_raw": core.rewards_collected_cum.usdc_raw,

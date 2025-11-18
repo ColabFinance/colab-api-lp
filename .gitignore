@@ -68,3 +68,4 @@ docker/*.log
 apps/api-signals/mongo_data/*
 
 out/*
+mongo_data

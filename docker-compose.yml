@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      network: host
+      # network: host
     container_name: api-liquidity-provider
     restart: always
     env_file:
@@ -13,7 +13,7 @@ services:
     volumes:
       - .:/app:delegated
     working_dir: /app
-    network_mode: "host"
+    # network_mode: "host"
 
 volumes:
   mongo_data:
