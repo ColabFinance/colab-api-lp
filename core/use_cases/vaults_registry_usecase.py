@@ -275,13 +275,7 @@ def deploy_vault_uc(dex: str, req: DeployVaultRequest) -> dict:
     vres = txs.deploy(abi=vabi, bytecode=vbyte, ctor_args=[owner], wait=True)
     vault_addr = vres["address"]
     vault = w3.eth.contract(address=Web3.to_checksum_address(vault_addr), abi=vabi)
-    
-    try:
-        vault.functions.setPoolOnce(Web3.to_checksum_address(adapter_addr)).call()
-        print("[SET_POOL_ONCE] static call: OK")
-    except Exception as e:
-        print("[SET_POOL_ONCE] static call REVERT:", e)
-        
+
     # 3) setPoolOnce(adapter)
     try:
         tx_res = txs.send(
