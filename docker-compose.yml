@@ -1,19 +1,34 @@
 services:
+  mongo-lp:
+    image: mongo:6.0
+    container_name: mongo-lp
+    restart: always
+    ports:
+      - "27019:27017"           # usa 27019 na máquina host p/ não bater com o 27018 do api-signals
+    volumes:
+      - ./mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api-liquidity-provider:
     build:
       context: .
       dockerfile: ./Dockerfile
-      # network: host
     container_name: api-liquidity-provider
     restart: always
     env_file:
       - .env
+    depends_on:
+      mongo-lp:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
       - .:/app:delegated
     working_dir: /app
-    # network_mode: "host"
 
 volumes:
   mongo_data:
