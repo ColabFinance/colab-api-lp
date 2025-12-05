@@ -39,7 +39,7 @@ class TxService:
     # ---------- internal helpers ----------
 
     def _next_nonce(self) -> int:
-        return self.w3.eth.get_transaction_count(self.account.address)
+        return self.w3.eth.get_transaction_count(self.account.address, "pending")
 
     def _estimate_with_strategy(self, tx: dict, strategy: GasStrategy) -> int:
         """
