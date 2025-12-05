@@ -8,6 +8,10 @@ load_dotenv()
 
 @dataclass
 class Settings:
+    # MongoDB
+    MONGO_URI: str
+    MONGO_DB: str
+    
     PANCAKE_V3_QUOTER: str
     PANCAKE_V3_ROUTER: str
     PANCAKE_FACTORY: str
@@ -69,5 +73,7 @@ def get_settings() -> Settings:
         PANCAKE_V3_ROUTER = os.getenv("PANCAKE_V3_ROUTER","0x1b81D678ffb9C0263b24A97847620C99d213eB14"),
         PANCAKE_FACTORY = os.getenv("PANCAKE_FACTORY","0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"),
         PANCAKE_TICK_SPACINGS = os.getenv("PANCAKE_TICK_SPACINGS","1,10,100"),
-        PANCAKE_MASTERCHEF_V3 = os.getenv("PANCAKE_MASTERCHEF_V3", "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3")
+        PANCAKE_MASTERCHEF_V3 = os.getenv("PANCAKE_MASTERCHEF_V3", "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3"),
+        MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo-lp:27017/lp_vaults"),
+        MONGO_DB = os.getenv("MONGO_DB", "lp_vaults")
     )
