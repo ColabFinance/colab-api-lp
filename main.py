@@ -8,7 +8,10 @@ from fastapi import FastAPI
 from adapters.external.database.vault_events_repository import VaultEventsRepository
 from adapters.external.database.vault_registry_repository import VaultRegistryRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
-from routes import health, vaults
+from adapters.entry.http.view.vaults_registry import router as vaults_registry_router
+from adapters.entry.http.view.vaults_position import router as vaults_position_router
+from adapters.entry.http.view.vaults_swap import router as vaults_swap_router
+from adapters.entry.http.view.vaults_batch import router as vaults_batch_router
 
 
 def init_mongo_indexes() -> None:
@@ -56,8 +59,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.include_router(health.router, prefix="/api")
-    app.include_router(vaults.router, prefix="/api")
+    app.include_router(vaults_registry_router, prefix="/api")
+    app.include_router(vaults_position_router, prefix="/api")
+    app.include_router(vaults_swap_router, prefix="/api")
+    app.include_router(vaults_batch_router, prefix="/api")
 
     return app
 
