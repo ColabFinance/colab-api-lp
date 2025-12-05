@@ -1,0 +1,101 @@
+{
+  "active": "api5",
+  "vaults": {
+    "vault1": {
+      "address": "0xef3aEE5DDf4655341931E69d2f0026dDb986539C",
+      "adapter": "0x6715e298e821b8C30bec2bf27C1435E45989047c",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "http://127.0.0.1:8545",
+      "version": "v2"
+    },
+    "vault2": {
+      "address": "0x1b1277b70c4996Ef8257B25fe4d8caE394b5d937",
+      "adapter": "0xa303587bf368bbcC07692b7816e388FBDD6a5A99",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x0000000000000000000000000000000000000000",
+      "rpc_url": "http://127.0.0.1:8545",
+      "version": "v2"
+    },
+    "vault3": {
+      "address": "0x7b3fe7A9c91db3e0526722CcEB66DB6F4D97D7be",
+      "adapter": "0x35CCEa4b80c61484f554EaDC8Ed8686491eaF201",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "http://127.0.0.1:8545",
+      "version": "v2"
+    },
+    "vault4": {
+      "address": "0xa81761dE856477302a255801c11cDf7292108c16",
+      "adapter": "0x32CE2A475D5709cA091Ab3721Ce02b0CF659a00A",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "http://127.0.0.1:8545",
+      "version": "v2"
+    },
+    "vault5": {
+      "address": "0x426A9412881d9A99e09076fa61B6f2d96ef272DC",
+      "adapter": "0xEe45a5Ca50B99d619066269638EAeDEc663f32db",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "http://127.0.0.1:8545",
+      "version": "v2"
+    },
+    "api1": {
+      "address": "0x9f1099c6708fb5913537725CD055453Aa97134A5",
+      "adapter": "0xa38a772E10DbAca535099f171cA4069eF3Ac1169",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2"
+    },
+    "api2": {
+      "address": "0xE70519B3e143e25C21177a98a0A9E9bdDc4e55Ea",
+      "adapter": "0x993b7bAD16ADFABe138985F5229ee6b5abc4F037",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2"
+    },
+    "api3": {
+      "address": "0x317bc723De1b3b9171295f1FB0b419A469f974b0",
+      "adapter": "0x0962010A3a22cCC5d318Ffeebb8f46d655cB03eB",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2"
+    },
+    "api4": {
+      "address": "0xc26CAA7E6c3afCFE8a05f4604DE03B96D058D3a3",
+      "adapter": "0xa5E0078339ead0cAeF684E566bCce2863c2a9Bbc",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2",
+      "swap_pools": {
+        "AERO_USDC": { "dex": "uniswap", "pool": "0xe5b5f522e98b5a2baae212d4da66b865b781db97" }
+      }
+    },
+    "api5": {
+      "address": "0xd32d5B2A76a3047B206051911f9CE1CeE205564C",
+      "adapter": "0x4b109E65E3F2E60a1B607F00A13BeA66ce97be88",
+      "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1",
+      "nfpm": "0x827922686190790b37229fd06084350E74485b72",
+      "gauge": "0x45C6e6A47a711B14D8357D5243F46704904578e3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2",
+      "swap_pools": {
+        "AERO_USDC": { "dex": "uniswap", "pool": "0xe5b5f522e98b5a2baae212d4da66b865b781db97" }
+      }
+    }
+  }
+}

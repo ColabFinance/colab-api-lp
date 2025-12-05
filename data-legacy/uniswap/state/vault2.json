@@ -1,0 +1,151 @@
+{
+  "vault_address": "0x561A3Ca88eF38ABC1eCB6B5C8a2fFaa28Cd0b384",
+  "nfpm": "0x1238536071E1c677A632429e3655c799b22cDA52",
+  "pool": "0x6418EEC70f50913ff0d756B48d32Ce7C02b47C47",
+  "gauge": null,
+  "created_at": "2025-10-16T17:10:24.284112",
+  "positions": [],
+  "fees_collected_cum": {
+    "token0_raw": 57267072,
+    "token1_raw": 4024715956232507
+  },
+  "fees_cum_usd": 115.47276857422011,
+  "exec_history": [
+    {
+      "ts": "2025-10-16T17:10:24.284438",
+      "mode": "deploy_vault_v2",
+      "vault": "0x561A3Ca88eF38ABC1eCB6B5C8a2fFaa28Cd0b384",
+      "adapter": "0x7Fff52E32c28a72D1aB087Cb726c6cd01C865786",
+      "pool": "0x6418EEC70f50913ff0d756B48d32Ce7C02b47C47",
+      "nfpm": "0x1238536071E1c677A632429e3655c799b22cDA52",
+      "gauge": null,
+      "tx_adapter": "754ca0805739f8ee7f29130aa23a2838cd3aba09fec083a1fe74f9aad7b5bf7b",
+      "tx_vault": "1241bdda9e98c9135196e979fa6eb70d5ae923861da52d2f462096bd2e335a98"
+    },
+    {
+      "ts": "2025-10-16T17:10:49.917791",
+      "mode": "deposit",
+      "token": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "amount_human": 0.05,
+      "tx": "5a06aaccc4ad46dad0a6d347cbb7ef13741f0422e62458be46da6b9558c3ba99"
+    },
+    {
+      "ts": "2025-10-16T17:11:33.852058",
+      "mode": "deposit",
+      "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "amount_human": 780.0,
+      "tx": "a8ea5c66ee9f68709eb31574cea26160f05d9b431e92d175ca7a7e9165296acc"
+    },
+    {
+      "ts": "2025-10-16T17:11:54.730639",
+      "mode": "baseline_set",
+      "baseline_usd": 781.603911097363,
+      "tx": null
+    },
+    {
+      "ts": "2025-10-16T17:12:33.391290",
+      "mode": "open",
+      "lower": 179000,
+      "upper": 180400,
+      "tx": "f612f526cef6b63aa801252ecf575fd333ab8f6a6c34a5a4fa1e9a9e27aa8073"
+    },
+    {
+      "ts": "2025-10-16T17:13:19.771107",
+      "mode": "baseline_set",
+      "baseline_usd": 1561.603910097363,
+      "tx": null
+    },
+    {
+      "ts": "2025-10-19T18:24:14.204211",
+      "mode": "collect",
+      "tx": "8667cb3a2465ff418ce6c5b29759cb7956b30fb3b8f97a7897a0230978454145"
+    },
+    {
+      "ts": "2025-10-24T15:17:16.667249",
+      "mode": "collect",
+      "tx": "419c0b076513b905a0c9de2bf1e7a4673674b79554db41b94627a9c409ef89b5"
+    },
+    {
+      "ts": "2025-10-24T15:18:16.866544",
+      "mode": "exit",
+      "to": null,
+      "tx": "9bf9a5ac69483c1a2107efbdc79f69338556ecb78c9f6131b3701e65d6c91ba5"
+    },
+    {
+      "ts": "2025-10-24T15:21:21.793078",
+      "mode": "open",
+      "lower": 182600,
+      "upper": 183600,
+      "tx": "7548b53b51b7ff0a435018162fc5fdd2c5932b86f3cee63fcc708cc28581d8d7"
+    },
+    {
+      "ts": "2025-10-24T15:22:18.879525",
+      "mode": "exit_withdraw",
+      "to": "0x71955d4098cD2C0737184Ec881016a538ed9A90D",
+      "tx": "ccf4d45d02f67108181e551c453e0005d975d490cb1d3f571b64aab8dc3c82c7"
+    },
+    {
+      "ts": "2025-10-24T16:48:01.857976",
+      "mode": "deposit",
+      "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "amount_human": 150.0,
+      "tx": "b4dbaa9ca48949015f44c4f679fa9c47c1901d2a3a4a4ca1314c5e3e1bd7c78f"
+    },
+    {
+      "ts": "2025-10-24T17:47:28.143553",
+      "mode": "open",
+      "lower": 182000,
+      "upper": 183000,
+      "tx": "5096225d53cf8bf8a4daf5727f5461cc7adf684e3a81e5e4de8a8de3218afdaa"
+    },
+    {
+      "ts": "2025-10-24T17:48:04.151273",
+      "mode": "exit_withdraw",
+      "to": "0x71955d4098cD2C0737184Ec881016a538ed9A90D",
+      "tx": "f59aceb36437a416da8191914725eb09f7ad9b114ae0e77ec8ae300e7961249e"
+    }
+  ],
+  "collect_history": [
+    {
+      "ts": "2025-10-19T18:24:14.203962",
+      "fees0_raw": 35708696,
+      "fees1_raw": 2176605791410897,
+      "fees_usd_est": 70.06311731628267,
+      "tx": "8667cb3a2465ff418ce6c5b29759cb7956b30fb3b8f97a7897a0230978454145"
+    },
+    {
+      "ts": "2025-10-24T15:17:16.666994",
+      "fees0_raw": 21558376,
+      "fees1_raw": 1848110164821610,
+      "fees_usd_est": 45.40965125793743,
+      "tx": "419c0b076513b905a0c9de2bf1e7a4673674b79554db41b94627a9c409ef89b5"
+    }
+  ],
+  "deposit_history": [
+    {
+      "ts": "2025-10-16T17:10:49.917408",
+      "token": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "amount_human": 0.05,
+      "amount_raw": 50000000000000000,
+      "tx": "5a06aaccc4ad46dad0a6d347cbb7ef13741f0422e62458be46da6b9558c3ba99"
+    },
+    {
+      "ts": "2025-10-16T17:11:33.851591",
+      "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "amount_human": 780.0,
+      "amount_raw": 780000000,
+      "tx": "a8ea5c66ee9f68709eb31574cea26160f05d9b431e92d175ca7a7e9165296acc"
+    },
+    {
+      "ts": "2025-10-24T16:48:01.857387",
+      "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "amount_human": 150.0,
+      "amount_raw": 150000000,
+      "tx": "b4dbaa9ca48949015f44c4f679fa9c47c1901d2a3a4a4ca1314c5e3e1bd7c78f"
+    }
+  ],
+  "error_history": [],
+  "vault_initial_usd": 1561.603910097363,
+  "baseline_set_ts": "2025-10-16T17:13:19.770772",
+  "last_fees_update_ts": "2025-10-24T15:17:16.666635"
+}

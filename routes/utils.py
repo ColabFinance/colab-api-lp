@@ -5,9 +5,9 @@ from pydantic import BaseModel
 
 from fastapi import HTTPException
 from web3 import Web3
-from domain.models import StatusCore
-from services.chain_reader import USD_SYMBOLS, _is_stable_addr,_is_usd_symbol, compute_status, sqrtPriceX96_to_price_t1_per_t0
-from adapters.aerodrome import AerodromeAdapter
+from core.domain.models import StatusCore
+from core.services.status_service import USD_SYMBOLS, _is_stable_addr,_is_usd_symbol, compute_status, sqrtPriceX96_to_price_t1_per_t0
+from adapters.chain.aerodrome import AerodromeAdapter
 from config import get_settings
 
 
@@ -96,9 +96,9 @@ def snapshot_status(adapter, dex: str, alias: str) -> dict:
             "pending_usd_est": core.gauge_rewards.pending_usd_est if core.gauge_rewards else None
         },
         "gauge_reward_balances": {
-            "symbol": core.gauge_reward_balances["symbol"] if core.gauge_reward_balances else None,
-            "in_vault_raw": core.gauge_reward_balances["in_vault_raw"] if core.gauge_reward_balances else None,
-            "in_vault": core.gauge_reward_balances["in_vault"] if core.gauge_reward_balances else None
+            "symbol": core.gauge_reward_balances.get("symbol") if core.gauge_reward_balances else None,
+            "in_vault_raw": core.gauge_reward_balances.get("in_vault_raw") if core.gauge_reward_balances else None,
+            "in_vault": core.gauge_reward_balances.get("in_vault") if core.gauge_reward_balances else None
         },
         "rewards_collected_cum": {
             "usdc_raw": core.rewards_collected_cum.usdc_raw,

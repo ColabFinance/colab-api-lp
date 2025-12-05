@@ -9,23 +9,23 @@ from fastapi import APIRouter, HTTPException, Body
 from web3 import Web3
 
 from config import get_settings
-from domain.pancake_batch_request import PancakeBatchRequest
+from core.domain.pancake_batch_request import PancakeBatchRequest
 from routes.utils import ZERO_ADDR, _is_usd,estimate_eth_usd_from_pool, normalize_swap_pools_input, resolve_pool_from_vault, snapshot_status, tick_spacing_candidates
 
-from domain.swap import SwapExactInRequest, SwapQuoteRequest
-from domain.models import (
+from core.domain.swap import SwapExactInRequest, SwapQuoteRequest
+from core.domain.models import (
     DexName, VaultList, VaultRow, AddVaultRequest, SetPoolRequest,
     DeployVaultRequest, OpenRequest, RebalanceRequest, WithdrawRequest,
     DepositRequest, CollectRequest, BaselineRequest, StatusResponse, StatusCore
 )
-from services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
-from services import state_repo, vault_repo
-from services.tx_service import TxService
-from services.chain_reader import USD_SYMBOLS, _is_usd_symbol, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
-from adapters.pancake_v3 import PancakeV3Adapter
-from adapters.uniswap_v3 import UniswapV3Adapter
-from adapters.aerodrome import AerodromeAdapter
-from domain.models import StakeRequest, UnstakeRequest, ClaimRewardsRequest
+from core.services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
+from adapters.external.database import state_repo, vault_repo
+from core.services.tx_service import TxService
+from core.services.status_service import USD_SYMBOLS, _is_usd_symbol, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
+from adapters.chain.pancake_v3 import PancakeV3Adapter
+from adapters.chain.uniswap_v3 import UniswapV3Adapter
+from adapters.chain.aerodrome import AerodromeAdapter
+from core.domain.models import StakeRequest, UnstakeRequest, ClaimRewardsRequest
 
 router = APIRouter(tags=["vaults"])
 
@@ -112,6 +112,167 @@ def status(dex: str, alias: str):
         pool=v.get("pool"),
         **core.model_dump()
     )
+
+@router.post("/vaults/{dex}/{alias}/baseline")
+def baseline(dex: str, alias: str, req: BaselineRequest):
+    if req.action == "set":
+        # recompute USD using status to keep one source of truth
+        v = vault_repo.get_vault(dex, alias)
+
+        state_repo.ensure_state_initialized(dex, alias, vault_address=v["address"])
+        st = state_repo.load_state(dex, alias)
+    
+        if not v or not v.get("pool"):
+            raise HTTPException(400, "Vault has no pool set")
+        ad = _adapter_for(dex, v["pool"], v.get("nfpm"), v["address"], v.get("rpc_url"), v.get("gauge"))
+        s: StatusCore = compute_status(ad, dex, alias)
+        baseline_usd = float(s.usd_panel.usd_value)
+        st["vault_initial_usd"] = baseline_usd
+        st["baseline_set_ts"] = datetime.utcnow().isoformat()
+        state_repo.save_state(dex, alias, st)
+        
+        state_repo.append_history(dex, alias, "exec_history", {
+            "ts": datetime.utcnow().isoformat(),
+            "mode": "baseline_set",
+            "baseline_usd": baseline_usd,
+            "tx": None
+        })
+        
+        return {"ok": True, "baseline_usd": st["vault_initial_usd"]}
+    # show
+    st = state_repo.load_state(dex, alias)
+    return {"baseline_usd": float(st.get("vault_initial_usd", 0.0) or 0.0)}
+
+@router.post("/vaults/{dex}/deploy")
+def deploy_vault(dex: str, req: DeployVaultRequest):
+    """
+    Deploy flow (artifact mode, default):
+      1) Deploy the DEX-specific on-chain Adapter
+      2) Deploy SingleUserVaultV2(owner)
+      3) vault.setPoolOnce(adapter)
+      4) Save registry/state
+    Back-compat: if req.version == "v1", keep the old artifact path & constructor.
+    """
+    s = get_settings()
+    rpc = req.rpc_url or s.RPC_URL_DEFAULT
+    txs = TxService(rpc)
+    w3 = txs.w3
+
+    # -------- owner/source account --------
+    owner = Web3.to_checksum_address(req.owner) if req.owner else txs.sender_address()
+
+    normalized_swap_pools = normalize_swap_pools_input(dex, req.swap_pools)
+    
+    # 1) Deploy adapter conforme DEX
+    if dex == "uniswap":
+        adapter_art_path = Path("out/UniV3Adapter.sol/UniV3Adapter.json")
+        if not adapter_art_path.exists():
+            raise HTTPException(501, "Adapter artifact (Uniswap) not found")
+        aart = json.loads(adapter_art_path.read_text())
+        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
+        adapter_res = txs.deploy(
+            abi=aabi, bytecode=abyte,
+            ctor_args=[Web3.to_checksum_address(req.nfpm), Web3.to_checksum_address(req.pool)],
+            wait=True
+        )
+        adapter_addr = adapter_res["address"]
+        
+    elif dex == "aerodrome":
+        adapter_art_path = Path("out/SlipstreamAdapter.sol/SlipstreamAdapter.json")
+        if not adapter_art_path.exists():
+            raise HTTPException(501, "Adapter artifact (Aerodrome) not found")
+        aart = json.loads(adapter_art_path.read_text())
+        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
+        ctor = [Web3.to_checksum_address(req.pool), Web3.to_checksum_address(req.nfpm)]
+        if req.gauge:
+            ctor.append(Web3.to_checksum_address(req.gauge))
+        adapter_res = txs.deploy(abi=aabi, bytecode=abyte, ctor_args=ctor, wait=True)
+        adapter_addr = adapter_res["address"]
+        
+    elif dex == "pancake":
+        HERE = Path(__file__).resolve()
+        PROJECT_ROOT = HERE.parents[1]  # /app
+
+        adapter_art_path = PROJECT_ROOT / "out" / "PancakeV3Adapter.sol" / "PancakeV3Adapter.json"
+        # adapter_art_path = Path("out/PancakeV3Adapter.sol/PancakeV3Adapter.json")
+        if not adapter_art_path.exists():
+            raise HTTPException(501, "Adapter artifact (Pancake) not found")
+        aart = json.loads(adapter_art_path.read_text())
+        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
+        ctor = [
+            Web3.to_checksum_address(req.pool),
+            Web3.to_checksum_address(req.nfpm),
+            Web3.to_checksum_address(req.gauge) if req.gauge else Web3.to_checksum_address(ZERO_ADDR),
+        ]
+        adapter_res = txs.deploy(abi=aabi, bytecode=abyte, ctor_args=ctor, wait=True)
+        adapter_addr = adapter_res["address"]
+        
+    else:
+        raise HTTPException(400, "Unsupported dex for V2")
+
+    # 2) Deploy SingleUserVaultV2(owner)
+    HERE = Path(__file__).resolve()
+    PROJECT_ROOT = HERE.parents[1]  # /app
+
+    v2_path = PROJECT_ROOT / "out" / "SingleUserVaultV2.sol" / "SingleUserVaultV2.json"
+    if not v2_path.exists():
+        raise HTTPException(501, "Vault V2 artifact not found")
+    vart = json.loads(v2_path.read_text())
+    vabi = vart["abi"]; vbyte = vart["bytecode"]["object"] if isinstance(vart["bytecode"], dict) else vart["bytecode"]
+
+    vres = txs.deploy(abi=vabi, bytecode=vbyte, ctor_args=[owner], wait=True)
+    vault_addr = vres["address"]
+    vault = w3.eth.contract(address=Web3.to_checksum_address(vault_addr), abi=vabi)
+
+    # 3) setPoolOnce(adapter)
+    try:
+        txs.send(vault.functions.setPoolOnce(Web3.to_checksum_address(adapter_addr)), wait=True)
+    except Exception as e:
+        raise HTTPException(500, f"setPoolOnce failed: {e}")
+
+    # 4) registry/state
+    vault_repo.add_vault(dex, req.alias, {
+        "address": vault_addr,
+        "adapter": adapter_addr,
+        "pool": req.pool,
+        "nfpm": req.nfpm,
+        "gauge": req.gauge,
+        "rpc_url": req.rpc_url,
+        "version": "v2",
+        "swap_pools": normalized_swap_pools,
+    })
+    state_repo.ensure_state_initialized(
+        dex, req.alias,
+        vault_address=vault_addr,
+        nfpm=req.nfpm,
+        pool=req.pool,
+        gauge=req.gauge
+    )
+    vault_repo.set_active(dex, req.alias)
+
+    state_repo.append_history(dex, req.alias, "exec_history", {
+        "ts": datetime.utcnow().isoformat(),
+        "mode": "deploy_vault_v2",
+        "vault": vault_addr,
+        "adapter": adapter_addr,
+        "pool": req.pool,
+        "nfpm": req.nfpm,
+        "gauge": req.gauge,
+        "tx_adapter": adapter_res["tx"],
+        "tx_vault": vres["tx"]
+    })
+
+    return {
+        "tx_vault": vres["tx"],
+        "tx_adapter": adapter_res["tx"],
+        "vault": vault_addr,
+        "adapter": adapter_addr,
+        "alias": req.alias,
+        "dex": dex,
+        "version": "v2",
+        "owner": owner,
+    }
+
 
 @router.post("/vaults/{dex}/{alias}/open")
 def open_position(dex: str, alias: str, req: OpenRequest):
@@ -948,166 +1109,6 @@ def deposit(dex: str, alias: str, req: DepositRequest):
         "gas_usd": gas_usd,
         "before": before,
         "after": after,
-    }
-
-@router.post("/vaults/{dex}/{alias}/baseline")
-def baseline(dex: str, alias: str, req: BaselineRequest):
-    if req.action == "set":
-        # recompute USD using status to keep one source of truth
-        v = vault_repo.get_vault(dex, alias)
-
-        state_repo.ensure_state_initialized(dex, alias, vault_address=v["address"])
-        st = state_repo.load_state(dex, alias)
-    
-        if not v or not v.get("pool"):
-            raise HTTPException(400, "Vault has no pool set")
-        ad = _adapter_for(dex, v["pool"], v.get("nfpm"), v["address"], v.get("rpc_url"), v.get("gauge"))
-        s: StatusCore = compute_status(ad, dex, alias)
-        baseline_usd = float(s.usd_panel.usd_value)
-        st["vault_initial_usd"] = baseline_usd
-        st["baseline_set_ts"] = datetime.utcnow().isoformat()
-        state_repo.save_state(dex, alias, st)
-        
-        state_repo.append_history(dex, alias, "exec_history", {
-            "ts": datetime.utcnow().isoformat(),
-            "mode": "baseline_set",
-            "baseline_usd": baseline_usd,
-            "tx": None
-        })
-        
-        return {"ok": True, "baseline_usd": st["vault_initial_usd"]}
-    # show
-    st = state_repo.load_state(dex, alias)
-    return {"baseline_usd": float(st.get("vault_initial_usd", 0.0) or 0.0)}
-
-@router.post("/vaults/{dex}/deploy")
-def deploy_vault(dex: str, req: DeployVaultRequest):
-    """
-    Deploy flow (artifact mode, default):
-      1) Deploy the DEX-specific on-chain Adapter
-      2) Deploy SingleUserVaultV2(owner)
-      3) vault.setPoolOnce(adapter)
-      4) Save registry/state
-    Back-compat: if req.version == "v1", keep the old artifact path & constructor.
-    """
-    s = get_settings()
-    rpc = req.rpc_url or s.RPC_URL_DEFAULT
-    txs = TxService(rpc)
-    w3 = txs.w3
-
-    # -------- owner/source account --------
-    owner = Web3.to_checksum_address(req.owner) if req.owner else txs.sender_address()
-
-    normalized_swap_pools = normalize_swap_pools_input(dex, req.swap_pools)
-    
-    # 1) Deploy adapter conforme DEX
-    if dex == "uniswap":
-        adapter_art_path = Path("out/UniV3Adapter.sol/UniV3Adapter.json")
-        if not adapter_art_path.exists():
-            raise HTTPException(501, "Adapter artifact (Uniswap) not found")
-        aart = json.loads(adapter_art_path.read_text())
-        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
-        adapter_res = txs.deploy(
-            abi=aabi, bytecode=abyte,
-            ctor_args=[Web3.to_checksum_address(req.nfpm), Web3.to_checksum_address(req.pool)],
-            wait=True
-        )
-        adapter_addr = adapter_res["address"]
-        
-    elif dex == "aerodrome":
-        adapter_art_path = Path("out/SlipstreamAdapter.sol/SlipstreamAdapter.json")
-        if not adapter_art_path.exists():
-            raise HTTPException(501, "Adapter artifact (Aerodrome) not found")
-        aart = json.loads(adapter_art_path.read_text())
-        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
-        ctor = [Web3.to_checksum_address(req.pool), Web3.to_checksum_address(req.nfpm)]
-        if req.gauge:
-            ctor.append(Web3.to_checksum_address(req.gauge))
-        adapter_res = txs.deploy(abi=aabi, bytecode=abyte, ctor_args=ctor, wait=True)
-        adapter_addr = adapter_res["address"]
-        
-    elif dex == "pancake":
-        HERE = Path(__file__).resolve()
-        PROJECT_ROOT = HERE.parents[1]  # /app
-
-        adapter_art_path = PROJECT_ROOT / "out" / "PancakeV3Adapter.sol" / "PancakeV3Adapter.json"
-        # adapter_art_path = Path("out/PancakeV3Adapter.sol/PancakeV3Adapter.json")
-        if not adapter_art_path.exists():
-            raise HTTPException(501, "Adapter artifact (Pancake) not found")
-        aart = json.loads(adapter_art_path.read_text())
-        aabi = aart["abi"]; abyte = aart["bytecode"]["object"] if isinstance(aart["bytecode"], dict) else aart["bytecode"]
-        ctor = [
-            Web3.to_checksum_address(req.pool),
-            Web3.to_checksum_address(req.nfpm),
-            Web3.to_checksum_address(req.gauge) if req.gauge else Web3.to_checksum_address(ZERO_ADDR),
-        ]
-        adapter_res = txs.deploy(abi=aabi, bytecode=abyte, ctor_args=ctor, wait=True)
-        adapter_addr = adapter_res["address"]
-        
-    else:
-        raise HTTPException(400, "Unsupported dex for V2")
-
-    # 2) Deploy SingleUserVaultV2(owner)
-    HERE = Path(__file__).resolve()
-    PROJECT_ROOT = HERE.parents[1]  # /app
-
-    v2_path = PROJECT_ROOT / "out" / "SingleUserVaultV2.sol" / "SingleUserVaultV2.json"
-    if not v2_path.exists():
-        raise HTTPException(501, "Vault V2 artifact not found")
-    vart = json.loads(v2_path.read_text())
-    vabi = vart["abi"]; vbyte = vart["bytecode"]["object"] if isinstance(vart["bytecode"], dict) else vart["bytecode"]
-
-    vres = txs.deploy(abi=vabi, bytecode=vbyte, ctor_args=[owner], wait=True)
-    vault_addr = vres["address"]
-    vault = w3.eth.contract(address=Web3.to_checksum_address(vault_addr), abi=vabi)
-
-    # 3) setPoolOnce(adapter)
-    try:
-        txs.send(vault.functions.setPoolOnce(Web3.to_checksum_address(adapter_addr)), wait=True)
-    except Exception as e:
-        raise HTTPException(500, f"setPoolOnce failed: {e}")
-
-    # 4) registry/state
-    vault_repo.add_vault(dex, req.alias, {
-        "address": vault_addr,
-        "adapter": adapter_addr,
-        "pool": req.pool,
-        "nfpm": req.nfpm,
-        "gauge": req.gauge,
-        "rpc_url": req.rpc_url,
-        "version": "v2",
-        "swap_pools": normalized_swap_pools,
-    })
-    state_repo.ensure_state_initialized(
-        dex, req.alias,
-        vault_address=vault_addr,
-        nfpm=req.nfpm,
-        pool=req.pool,
-        gauge=req.gauge
-    )
-    vault_repo.set_active(dex, req.alias)
-
-    state_repo.append_history(dex, req.alias, "exec_history", {
-        "ts": datetime.utcnow().isoformat(),
-        "mode": "deploy_vault_v2",
-        "vault": vault_addr,
-        "adapter": adapter_addr,
-        "pool": req.pool,
-        "nfpm": req.nfpm,
-        "gauge": req.gauge,
-        "tx_adapter": adapter_res["tx"],
-        "tx_vault": vres["tx"]
-    })
-
-    return {
-        "tx_vault": vres["tx"],
-        "tx_adapter": adapter_res["tx"],
-        "vault": vault_addr,
-        "adapter": adapter_addr,
-        "alias": req.alias,
-        "dex": dex,
-        "version": "v2",
-        "owner": owner,
     }
 
 @router.post("/vaults/{dex}/{alias}/stake")
@@ -2500,7 +2501,6 @@ def pancake_swap_exact_in(alias: str, req: SwapExactInRequest):
         "before": before, "after": after, "send_res": send_res,
         "rewards_added": rewards_added
     }
-
 
 @router.post("/vaults/pancake/{alias}/batch/unstake-exit-swap-open")
 def pancake_batch_unstake_exit_swap_open(alias: str, req: PancakeBatchRequest):

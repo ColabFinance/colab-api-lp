@@ -1,0 +1,123 @@
+{
+  "active": "pancake6",
+  "vaults": {
+    "pancake1": {
+      "address": "0x0834f72487323142A0e3C583f492518CB27EA539",
+      "adapter": "0x9280c3aF54099d370f6Cbcf7A7CaD3CC851963d0",
+      "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2",
+      "swap_pools": {
+        "WETH_USDC": {
+          "dex": "aerodrome",
+          "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1"
+        }
+      }
+    },
+    "pancake2": {
+      "address": "0x79c8e8B6fD2d1F50D4DDEE00368b97128587149B",
+      "adapter": "0xd2166a591FAa142797D0f6fe135cb7ef02Be214F",
+      "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2",
+      "swap_pools": {
+        "WETH_USDC": {
+          "dex": "aerodrome",
+          "pool": "0xdbc6998296caa1652a810dc8d3baf4a8294330f1"
+        },
+        "CAKE_USDC": {
+          "dex": "pancake",
+          "pool": "0xBf1713B92F4212F0fAC0078e2cea7E182D40078B"
+        }
+      }
+    },
+    "pancake3": {
+      "address": "0x2966e469f2751A437b3cE6B306F9d764617dE5aB",
+      "adapter": "0x4513399C349aD2F5a3796b318930ffBb717370aB",
+      "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-mainnet.infura.io/v3/079d35a3c196469191c9accc1d68d25b",
+      "version": "v2",
+      "swap_pools": {
+        "WETH_USDC": {
+          "dex": "aerodrome",
+          "pool": "0xdbc6998296caA1652A810dc8D3BaF4A8294330f1"
+        },
+        "CAKE_USDC": {
+          "dex": "pancake",
+          "pool": "0xBf1713B92F4212F0fAC0078e2cea7E182D40078B"
+        },
+        "WETH_USDC_PANCAKE": {
+          "dex": "pancake",
+          "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38"
+        }
+      }
+    },
+    "pancake4": {
+      "address": "0xe330f6A7275F3C925D8360aF7E6263746a330AB0",
+      "adapter": "0xC11A1E67Ca42a8756f8F1622D51E833801c6F7b3",
+      "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-rpc.publicnode.com",
+      "version": "v2",
+      "swap_pools": {
+        "WETH_USDC": {
+          "dex": "aerodrome",
+          "pool": "0xdbc6998296caA1652A810dc8D3BaF4A8294330f1"
+        },
+        "CAKE_USDC": {
+          "dex": "pancake",
+          "pool": "0xBf1713B92F4212F0fAC0078e2cea7E182D40078B"
+        },
+        "WETH_USDC_PANCAKE": {
+          "dex": "pancake",
+          "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38"
+        }
+      }
+    },
+    "pancake5": {
+      "address": "0xb53b977d795D9731564D58055D68a756f01a0aeB",
+      "adapter": "0x057c989b6ee7298B35D88A3cdE933A470CdEFafe",
+      "pool": "0xb94b22332ABf5f89877A14Cc88f2aBC48c34B3Df",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-rpc.publicnode.com",
+      "version": "v2",
+      "swap_pools": {
+        "CAKE_USDC": {
+          "dex": "pancake",
+          "pool": "0xBf1713B92F4212F0fAC0078e2cea7E182D40078B"
+        }
+      }
+    },
+    "pancake6": {
+      "address": "0x142DCEC8BD4AFF7E207E663FA16989C7A89917C3",
+      "adapter": "0xa792A8CB213C14E85D5A36ee50C6Ed869c36f8A8",
+      "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38",
+      "nfpm": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
+      "gauge": "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3",
+      "rpc_url": "https://base-rpc.publicnode.com",
+      "version": "v2",
+      "swap_pools": {
+        "WETH_USDC": {
+          "dex": "aerodrome",
+          "pool": "0xdbc6998296caA1652A810dc8D3BaF4A8294330f1"
+        },
+        "CAKE_USDC": {
+          "dex": "pancake",
+          "pool": "0xBf1713B92F4212F0fAC0078e2cea7E182D40078B"
+        },
+        "WETH_USDC_PANCAKE": {
+          "dex": "pancake",
+          "pool": "0x72AB388E2E2F6FaceF59E3C3FA2C4E29011c2D38"
+        }
+      }
+    }
+  }
+}
