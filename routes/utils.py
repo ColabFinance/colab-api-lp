@@ -96,9 +96,9 @@ def snapshot_status(adapter, dex: str, alias: str) -> dict:
             "pending_usd_est": core.gauge_rewards.pending_usd_est if core.gauge_rewards else None
         },
         "gauge_reward_balances": {
-            "symbol": core.gauge_reward_balances["symbol"] if core.gauge_reward_balances else None,
-            "in_vault_raw": core.gauge_reward_balances["in_vault_raw"] if core.gauge_reward_balances else None,
-            "in_vault": core.gauge_reward_balances["in_vault"] if core.gauge_reward_balances else None
+            "symbol": core.gauge_reward_balances.get("symbol") if core.gauge_reward_balances else None,
+            "in_vault_raw": core.gauge_reward_balances.get("in_vault_raw") if core.gauge_reward_balances else None,
+            "in_vault": core.gauge_reward_balances.get("in_vault") if core.gauge_reward_balances else None
         },
         "rewards_collected_cum": {
             "usdc_raw": core.rewards_collected_cum.usdc_raw,
