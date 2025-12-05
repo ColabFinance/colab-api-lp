@@ -20,6 +20,7 @@ from core.domain.models import (
     StatusCore,
     BaselineRequest,
 )
+from core.services.exceptions import TransactionRevertedError
 from core.services.tx_service import TxService
 from core.services.status_service import (
     compute_status,
@@ -277,9 +278,21 @@ def deploy_vault_uc(dex: str, req: DeployVaultRequest) -> dict:
 
     # 3) setPoolOnce(adapter)
     try:
-        txs.send(vault.functions.setPoolOnce(Web3.to_checksum_address(adapter_addr)), wait=True)
+        tx_res = txs.send(
+            vault.functions.setPoolOnce(Web3.to_checksum_address(adapter_addr)),
+            wait=True,
+            gas_strategy="aggressive"
+        )
+        print("[SET_POOL_ONCE] tx_res:", tx_res)
+    except TransactionRevertedError as e:
+        print("[SET_POOL_ONCE] REVERTED")
+        print("  tx_hash:", e.tx_hash)
+        print("  receipt:", e.receipt)
+        print("  msg:", e.msg)
+        raise HTTPException(500, f"setPoolOnce reverted: {e.msg}")
     except Exception as e:
-        raise HTTPException(500, f"setPoolOnce failed: {e}")
+        print("[SET_POOL_ONCE] OTHER ERROR:", repr(e))
+        raise HTTPException(500, f"setPoolOnce failed (generic): {e}")
 
     # 4) registry/state
     vault_repo.add_vault(
