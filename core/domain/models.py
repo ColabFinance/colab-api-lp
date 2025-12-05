@@ -37,7 +37,7 @@ class DeployVaultRequest(BaseModel):
     pool: str
     rpc_url: Optional[str] = None
     dex: Literal["uniswap", "aerodrome", "pancake"]
-    version: Literal["v1","v2"] = "v2"
+    version: Literal["v1","v2"] = "v1"
     owner: Optional[str] = None            # se None, usamos SENDER_FROM_ENV do TxService
     gauge: Optional[str] = None           
     swap_pools: Optional[Dict[str, SwapPoolRef]] = None
