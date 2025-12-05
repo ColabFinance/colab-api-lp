@@ -9,23 +9,23 @@ from fastapi import APIRouter, HTTPException, Body
 from web3 import Web3
 
 from config import get_settings
-from domain.pancake_batch_request import PancakeBatchRequest
+from core.domain.pancake_batch_request import PancakeBatchRequest
 from routes.utils import ZERO_ADDR, _is_usd,estimate_eth_usd_from_pool, normalize_swap_pools_input, resolve_pool_from_vault, snapshot_status, tick_spacing_candidates
 
-from domain.swap import SwapExactInRequest, SwapQuoteRequest
-from domain.models import (
+from core.domain.swap import SwapExactInRequest, SwapQuoteRequest
+from core.domain.models import (
     DexName, VaultList, VaultRow, AddVaultRequest, SetPoolRequest,
     DeployVaultRequest, OpenRequest, RebalanceRequest, WithdrawRequest,
     DepositRequest, CollectRequest, BaselineRequest, StatusResponse, StatusCore
 )
-from services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
-from services import state_repo, vault_repo
-from services.tx_service import TxService
-from services.chain_reader import USD_SYMBOLS, _is_usd_symbol, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
-from adapters.pancake_v3 import PancakeV3Adapter
-from adapters.uniswap_v3 import UniswapV3Adapter
-from adapters.aerodrome import AerodromeAdapter
-from domain.models import StakeRequest, UnstakeRequest, ClaimRewardsRequest
+from core.services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
+from adapters.external.database import state_repo, vault_repo
+from core.services.tx_service import TxService
+from core.services.status_service import USD_SYMBOLS, _is_usd_symbol, _value_usd, compute_status, price_to_tick, sqrtPriceX96_to_price_t1_per_t0
+from adapters.chain.pancake_v3 import PancakeV3Adapter
+from adapters.chain.uniswap_v3 import UniswapV3Adapter
+from adapters.chain.aerodrome import AerodromeAdapter
+from core.domain.models import StakeRequest, UnstakeRequest, ClaimRewardsRequest
 
 router = APIRouter(tags=["vaults"])
 

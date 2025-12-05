@@ -10,9 +10,10 @@ from pymongo.database import Database
 
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_event_entity import VaultEvent
+from core.domain.repositories.vault_events_repository_interface import VaultEventsRepositoryInterface
 
 
-class VaultEventsRepository:
+class VaultEventsRepository(VaultEventsRepositoryInterface):
     """
     Repository responsible for storing and querying vault-related events.
 

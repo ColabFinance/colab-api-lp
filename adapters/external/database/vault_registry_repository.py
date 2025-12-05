@@ -9,9 +9,10 @@ from pymongo.collection import Collection
 
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_registry_entity import VaultRegistryEntry
+from core.domain.repositories.vault_registry_repository_interface import VaultRegistryRepositoryInterface
 
 
-class VaultRegistryRepository:
+class VaultRegistryRepository(VaultRegistryRepositoryInterface):
     """
     Repository responsible for persisting vault registry metadata in MongoDB.
 

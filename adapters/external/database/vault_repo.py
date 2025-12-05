@@ -22,9 +22,10 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from adapters.external.database.vault_registry_repository import VaultRegistryRepository
+from core.domain.repositories.vault_registry_repository_interface import VaultRegistryRepositoryInterface
 
 
-_repo = VaultRegistryRepository()
+_repo: VaultRegistryRepositoryInterface = VaultRegistryRepository()
 
 
 def list_vaults(dex: str) -> Dict[str, Any]:

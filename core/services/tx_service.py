@@ -4,7 +4,7 @@ from web3 import Web3
 from web3.contract.contract import ContractFunction
 from eth_account import Account
 
-from services.utils import to_json_safe
+from core.services.utils import to_json_safe
 
 from config import get_settings
 from .exceptions import (

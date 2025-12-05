@@ -5,9 +5,9 @@ from pydantic import BaseModel
 
 from fastapi import HTTPException
 from web3 import Web3
-from domain.models import StatusCore
-from services.chain_reader import USD_SYMBOLS, _is_stable_addr,_is_usd_symbol, compute_status, sqrtPriceX96_to_price_t1_per_t0
-from adapters.aerodrome import AerodromeAdapter
+from core.domain.models import StatusCore
+from core.services.status_service import USD_SYMBOLS, _is_stable_addr,_is_usd_symbol, compute_status, sqrtPriceX96_to_price_t1_per_t0
+from adapters.chain.aerodrome import AerodromeAdapter
 from config import get_settings
 
 

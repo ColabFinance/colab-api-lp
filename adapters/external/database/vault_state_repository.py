@@ -9,9 +9,10 @@ from pymongo.database import Database
 
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_state_entity import VaultStateDocument
+from core.domain.repositories.vault_state_repository_interface import VaultStateRepositoryInterface
 
 
-class VaultStateRepository:
+class VaultStateRepository(VaultStateRepositoryInterface):
     """
     Repository responsible for storing and retrieving the *current* vault state.
 

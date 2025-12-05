@@ -1,7 +1,7 @@
 from typing import Dict, Any, Tuple, Optional
 from web3 import Web3
 from .base import DexAdapter
-from adapters.utils import get_sqrt_ratio_at_tick, get_amounts_for_liquidity
+from adapters.chain.utils import get_sqrt_ratio_at_tick, get_amounts_for_liquidity
 
 # ---- minimal ABIs (same fragments you used in bot/chain.py) ----
 ABI_POOL = [
