@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from pymongo.collection import Collection
 from pymongo.database import Database
+from .helper_repo import sanitize_for_mongo
 
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_event_entity import VaultEvent
@@ -73,7 +74,9 @@ class VaultEventsRepository(VaultEventsRepositoryInterface):
             ts_iso=now_iso,
             payload=payload or {},
         )
-        self._collection.insert_one(event.to_mongo())
+        doc = event.to_mongo()
+        doc = sanitize_for_mongo(doc)
+        self._collection.insert_one(doc)
 
     def get_recent_events(
         self,

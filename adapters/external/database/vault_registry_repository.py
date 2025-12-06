@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pymongo.collection import Collection
 
+from adapters.external.database.helper_repo import sanitize_for_mongo
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_registry_entity import VaultRegistryEntry
 from core.domain.repositories.vault_registry_repository_interface import VaultRegistryRepositoryInterface
@@ -142,6 +143,7 @@ class VaultRegistryRepository(VaultRegistryRepositoryInterface):
             updated_at=now,
         )
         mongo_doc = entry.to_mongo()
+        mongo_doc = sanitize_for_mongo(mongo_doc)
         result = self.collection.insert_one(mongo_doc)
         entry.id = result.inserted_id
         return entry
