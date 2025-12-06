@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from pymongo.collection import Collection
 from pymongo.database import Database
 
+from adapters.external.database.helper_repo import sanitize_for_mongo
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_state_entity import VaultStateDocument
 from core.domain.repositories.vault_state_repository_interface import VaultStateRepositoryInterface
@@ -92,6 +93,7 @@ class VaultStateRepository(VaultStateRepositoryInterface):
             updated_at=now,
         )
         mongo_doc = entity.to_mongo()
+        mongo_doc = sanitize_for_mongo(mongo_doc)
         result = self._collection.insert_one(mongo_doc)
         entity.id = result.inserted_id
         return entity
