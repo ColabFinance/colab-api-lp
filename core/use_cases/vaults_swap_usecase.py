@@ -1365,6 +1365,40 @@ class VaultsSwapUseCase:
             },
         )
 
+        rewards_added = None
+        if req.convert_gauge_to_usdc:
+            try:
+                usdc_raw = int(amount_out_raw)
+                usdc_human = float(usdc_raw) / (10**dec_out)
+
+                try:
+                    in_sym = ad_vault.erc20(req.token_in).functions.symbol().call()
+                    out_sym = ad_vault.erc20(req.token_out).functions.symbol().call()
+                except Exception:  # noqa: BLE001
+                    in_sym, out_sym = "IN", "OUT"
+
+                self._state_repo.add_rewards_usdc_snapshot(
+                    dex=vault_dex,
+                    alias=alias,
+                    usdc_raw=usdc_raw,
+                    usdc_human=usdc_human,
+                    meta={
+                        "tx_hash": send_res["tx_hash"],
+                        "token_in": req.token_in,
+                        "token_out": req.token_out,
+                        "token_in_symbol": in_sym,
+                        "token_out_symbol": out_sym,
+                        "pool_used": req.pool_override,
+                        "fee_used": fee_used,
+                        "mode": "swap_reward_to_usdc_pancake",
+                    },
+                )
+                rewards_added = {"usdc_raw": usdc_raw, "usdc_human": usdc_human}
+            except Exception as exc:  # noqa: BLE001
+                import logging
+
+                logging.warning("Failed to add rewards_usdc_snapshot (pancake): %s", exc)
+                
         return {
             "tx": send_res["tx_hash"],
             "tick_spacing_used": int(fee_used),
@@ -1382,4 +1416,5 @@ class VaultsSwapUseCase:
             "before": before,
             "after": after,
             "send_res": send_res,
+            "rewards_added": rewards_added,
         }
