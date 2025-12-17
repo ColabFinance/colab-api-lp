@@ -15,47 +15,88 @@ ABI_ERC20 = [
 ]
 
 ABI_VAULT = [
-    {"name":"adapter","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenId","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenIdView","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
+    # views básicas
+    {"name": "owner", "outputs": [{"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "executor", "outputs": [{"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "adapter", "outputs": [{"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "dexRouter", "outputs": [{"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "feeCollector", "outputs": [{"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "strategyId", "outputs": [{"type": "uint256"}], "inputs": [], "stateMutability": "view", "type": "function"},
+
+    # automation config
+    {"name": "automationEnabled", "outputs": [{"type": "bool"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "cooldownSec", "outputs": [{"type": "uint32"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "maxSlippageBps", "outputs": [{"type": "uint16"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "allowSwap", "outputs": [{"type": "bool"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {
+        "name": "getAutomationConfig",
+        "outputs": [
+            {"type": "bool", "name": "enabled"},
+            {"type": "uint32", "name": "cooldown"},
+            {"type": "uint16", "name": "slippageBps"},
+            {"type": "bool", "name": "swapAllowed"},
+        ],
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+    },
+
+    # posição
+    {"name": "positionTokenId", "outputs": [{"type": "uint256"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "positionTokenIdView", "outputs": [{"type": "uint256"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "tokens", "outputs": [{"type": "address"}, {"type": "address"}], "inputs": [], "stateMutability": "view", "type": "function"},
+    {"name": "lastRebalanceTs", "outputs": [{"type": "uint256"}], "inputs": [], "stateMutability": "view", "type": "function"},
+
+    # ações manuais
     {"name":"openInitialPosition","outputs":[],"inputs":[{"type":"int24"},{"type":"int24"}],"stateMutability":"nonpayable","type":"function"},
     {"name":"rebalanceWithCaps","outputs":[{"type":"uint128"}],"inputs":[{"type":"int24"},{"type":"int24"},{"type":"uint256"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
     {"name":"exitPositionToVault","outputs":[],"inputs":[],"stateMutability":"nonpayable","type":"function"},
     {"name":"exitPositionAndWithdrawAll","outputs":[],"inputs":[{"type":"address"}],"stateMutability":"nonpayable","type":"function"},
     {"name":"collectToVault","outputs":[{"type":"uint256"},{"type":"uint256"}],"inputs":[],"stateMutability":"nonpayable","type":"function"},
+
+    # staking / rewards
     {"name":"stake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
     {"name":"unstake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
     {"name":"claimRewards", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
-    {"name":"swapExactInPancake","outputs":[{"type":"uint256"}],"inputs":[
-        {"type":"address","name":"router"},
-        {"type":"address","name":"tokenIn"},
-        {"type":"address","name":"tokenOut"},
-        {"type":"uint24","name":"fee"},
-        {"type":"uint256","name":"amountIn"},
-        {"type":"uint256","name":"amountOutMinimum"},
-        {"type":"uint160","name":"sqrtPriceLimitX96"}
-    ],"stateMutability":"nonpayable","type":"function"},
+
     {
-        "name": "unstakeExitSwapAndOpenPancake",
-        "outputs": [
-            {"type": "uint256", "name": "amountOut"},
-            {"type": "uint256", "name": "newTokenId"},
-            {"type": "uint128", "name": "newLiq"}
-        ],
+        "name": "swapExactInPancake",
+        "outputs": [{"type": "uint256"}],  # amountOut
         "inputs": [
-            {"type":"address","name":"router"},
-            {"type":"address","name":"tokenIn"},
-            {"type":"address","name":"tokenOut"},
-            {"type":"uint24","name":"fee"},
-            {"type":"uint256","name":"amountIn"},
-            {"type":"uint256","name":"amountOutMinimum"},
-            {"type":"uint160","name":"sqrtPriceLimitX96"},
-            {"type":"int24","name":"newLower"},
-            {"type":"int24","name":"newUpper"}
+            {"type": "address"},  # tokenIn
+            {"type": "address"},  # tokenOut
+            {"type": "uint24"},   # fee
+            {"type": "uint256"},  # amountIn
+            {"type": "uint256"},  # amountOutMinimum
+            {"type": "uint160"},  # sqrtPriceLimitX96
         ],
-        "stateMutability":"nonpayable",
-        "type":"function"
-    }
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    
+    # automação (executor)
+    {
+        "name": "autoRebalancePancake",
+        "outputs": [],
+        "inputs": [
+            {
+                "name": "params",
+                "type": "tuple",
+                "components": [
+                    {"name": "newLower", "type": "int24"},
+                    {"name": "newUpper", "type": "int24"},
+                    {"name": "fee", "type": "uint24"},
+                    {"name": "tokenIn", "type": "address"},
+                    {"name": "tokenOut", "type": "address"},
+                    {"name": "swapAmountIn", "type": "uint256"},
+                    {"name": "swapAmountOutMin", "type": "uint256"},
+                    {"name": "sqrtPriceLimitX96", "type": "uint160"},
+                ],
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
 ]
 
 U128_MAX = (1<<128) - 1
@@ -96,8 +137,17 @@ class PancakeV3Adapter(DexAdapter):
         return self.masterchef(ga) if ga else None
 
     def adapter_address(self) -> str:
-        # endereço do adapter não é usado p/ MasterChef, mas deixamos por consistência
-        return self.pool  # ou outro endereço do adapter caso você tenha
+        """
+        Return the on-chain CL adapter address wired in the ClientVault.
+
+        This is used by some gauges (Aero-style) that require the adapter
+        as an argument for reward accounting.
+        """
+        try:
+            return self.vault.functions.adapter().call()
+        except Exception:
+            # Fallback: keep old behavior if needed
+            return self.pool
 
     # ---------- leituras ----------
     def slot0(self) -> Tuple[int,int]:
@@ -125,6 +175,23 @@ class PancakeV3Adapter(DexAdapter):
         return {"token0": t0, "token1": t1, "sym0": sym0, "sym1": sym1, "dec0": dec0, "dec1": dec1, "fee": fee, "spacing": tickSpacing}
 
     def vault_state(self) -> Dict[str, Any]:
+        """
+        Read current position state from ClientVault + NFPM.
+
+        Returns a dict compatible with status_service.compute_status:
+        {
+          "tokenId": uint256,
+          "lower": int24,
+          "upper": int24,
+          "liq": uint128,
+          "staked": bool,
+          "gauge": address|None,
+          "twapOk": bool,
+          "lastRebalance": uint256,   # unix timestamp
+          "min_cd": uint256           # cooldown in seconds
+        }
+        """
+        # --- tokenId from ClientVault
         token_id = 0
         try:
             token_id = int(self.vault.functions.positionTokenId().call())
@@ -141,10 +208,12 @@ class PancakeV3Adapter(DexAdapter):
             (_n, _op, _t0, _t1, _fee, l, u, L, *_rest) = nfpm.functions.positions(int(token_id)).call()
             lower, upper, liq = int(l), int(u), int(L)
         else:
+            # No position: use spot tick just for reference
             _, spot_tick = self.slot0()
             lower = upper = int(spot_tick)
             liq = 0
 
+        # --- staking flag: NFT owner is gauge when staked
         mcv3_addr = self.gauge
         staked = False
         if token_id and mcv3_addr:
@@ -154,6 +223,17 @@ class PancakeV3Adapter(DexAdapter):
             except Exception:
                 staked = False
 
+        # --- cooldown / lastRebalance from ClientVault
+        try:
+            last_reb = int(self.vault.functions.lastRebalanceTs().call())
+        except Exception:
+            last_reb = 0
+
+        try:
+            cooldown_sec = int(self.vault.functions.cooldownSec().call())
+        except Exception:
+            cooldown_sec = 0
+
         return {
             "tokenId": token_id,
             "lower": lower,
@@ -161,7 +241,9 @@ class PancakeV3Adapter(DexAdapter):
             "liq": liq,
             "staked": staked,
             "gauge": (mcv3_addr if mcv3_addr else None),
-            "twapOk": True
+            "twapOk": True,          # ClientVault no longer enforces TWAP on-chain
+            "lastRebalance": last_reb,
+            "min_cd": cooldown_sec,  # kept as "min_cd" for status_service compatibility
         }
         
     def amounts_in_position_now(self, lower: int, upper: int, liq: int) -> Tuple[int,int]:
@@ -228,7 +310,15 @@ class PancakeV3Adapter(DexAdapter):
     def fn_vault_swap_exact_in(self, router: str, token_in: str, token_out: str,
                                fee: int, amount_in_raw: int, min_out_raw: int,
                                sqrt_price_limit_x96: int = 0):
-        # reusa a mesma função do VaultV2 (idêntica ao Uniswap)
+        """
+        Build a tx for a vault-level exactInputSingle swap.
+
+        NOTE: The new ClientVault does NOT expose this function. This helper
+        is kept only for legacy vaults that still implement _swapExactInPancake.
+        """
+        if not hasattr(self.vault.functions, "swapExactInPancake"):
+            raise NotImplementedError("Vault missing swapExactInPancake (ClientVault does not expose direct swaps).")
+
         return self.vault.functions.swapExactInPancake(
             Web3.to_checksum_address(router),
             Web3.to_checksum_address(token_in),
@@ -236,7 +326,7 @@ class PancakeV3Adapter(DexAdapter):
             int(fee),
             int(amount_in_raw),
             int(min_out_raw),
-            int(sqrt_price_limit_x96 or 0)
+            int(sqrt_price_limit_x96 or 0),
         )
 
     def fn_batch_unstake_exit_swap_open_pancake(
@@ -267,6 +357,41 @@ class PancakeV3Adapter(DexAdapter):
                 int(upper_tick),
             )
         raise NotImplementedError("Vault missing unstakeExitSwapAndOpenPancake")
+    
+    def fn_auto_rebalance_pancake(
+        self,
+        *,
+        new_lower: int,
+        new_upper: int,
+        fee: int,
+        token_in: str,
+        token_out: str,
+        swap_amount_in: int,
+        swap_amount_out_min: int,
+        sqrt_price_limit_x96: int = 0,
+    ):
+        """
+        Build a ContractFunction for ClientVault.autoRebalancePancake(params).
+
+        This is intended to be called ONLY by the configured executor address
+        on-chain (the Colab bot). The API-LP will typically sign this tx using
+        an internal private key, not the end-user wallet.
+        """
+        if not hasattr(self.vault.functions, "autoRebalancePancake"):
+            raise NotImplementedError("Vault missing autoRebalancePancake")
+
+        params = {
+            "newLower": int(new_lower),
+            "newUpper": int(new_upper),
+            "fee": int(fee),
+            "tokenIn": Web3.to_checksum_address(token_in),
+            "tokenOut": Web3.to_checksum_address(token_out),
+            "swapAmountIn": int(swap_amount_in),
+            "swapAmountOutMin": int(swap_amount_out_min),
+            "sqrtPriceLimitX96": int(sqrt_price_limit_x96 or 0),
+        }
+
+        return self.vault.functions.autoRebalancePancake(params)
     
     # ---------- farms (MasterChefV3) ----------
     def fn_stake(self):

@@ -12,6 +12,8 @@ from adapters.entry.http.view.vaults_registry import router as vaults_registry_r
 from adapters.entry.http.view.vaults_position import router as vaults_position_router
 from adapters.entry.http.view.vaults_swap import router as vaults_swap_router
 from adapters.entry.http.view.vaults_batch import router as vaults_batch_router
+from adapters.entry.http.view.vaults_factory import router as vaults_factory_router
+from adapters.entry.http.view.vaults_strategy_registry import router as vaults_strategy_registry_router
 
 
 def init_mongo_indexes() -> None:
@@ -63,6 +65,8 @@ def create_app() -> FastAPI:
     app.include_router(vaults_position_router, prefix="/api")
     app.include_router(vaults_swap_router, prefix="/api")
     app.include_router(vaults_batch_router, prefix="/api")
+    app.include_router(vaults_factory_router, prefix="/api")
+    app.include_router(vaults_strategy_registry_router, prefix="/api")
 
     return app
 

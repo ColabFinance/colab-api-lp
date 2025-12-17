@@ -33,6 +33,10 @@ class Settings:
     RPC_URL_DEFAULT: str
     PRIVATE_KEY: str  # hex 0x...
 
+    # on-chain registry / factory
+    STRATEGY_REGISTRY_ADDRESS: str
+    VAULT_FACTORY_ADDRESS: str
+    
     # data roots (simulate DB)
     DATA_ROOT: str = "data"                   # ./data
     UNISWAP_ROOT: str = "uniswap"             # ./data/uniswap
@@ -75,5 +79,11 @@ def get_settings() -> Settings:
         PANCAKE_TICK_SPACINGS = os.getenv("PANCAKE_TICK_SPACINGS","1,10,100"),
         PANCAKE_MASTERCHEF_V3 = os.getenv("PANCAKE_MASTERCHEF_V3", "0xC6A2Db661D5a5690172d8eB0a7DEA2d3008665A3"),
         MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo-lp:27017/lp_vaults"),
-        MONGO_DB = os.getenv("MONGO_DB", "lp_vaults")
+        MONGO_DB = os.getenv("MONGO_DB", "lp_vaults"),
+        STRATEGY_REGISTRY_ADDRESS=os.environ.get(
+            "STRATEGY_REGISTRY_ADDRESS", ""
+        ),
+        VAULT_FACTORY_ADDRESS=os.environ.get(
+            "VAULT_FACTORY_ADDRESS", ""
+        ),
     )

@@ -45,8 +45,10 @@ class VaultsBatchUseCase:
         - (Optionally) perform a swap between token_in and token_out
         - Open a new position with the resulting composition and range.
 
-    The entire sequence is performed atomically via a single vault contract
-    call, following the same semantics you had in your monolithic endpoint.
+    In the new architecture this is implemented through the ClientVault
+    contract, via its `autoRebalancePancake` function, which encapsulates
+    unstake/exit/swap/open in a single atomic call restricted to the
+    configured executor.
     """
 
     def __init__(
@@ -55,10 +57,8 @@ class VaultsBatchUseCase:
         """
         Initialize the VaultsBatchUseCase.
 
-        Args:
-            vault_repo: Repository used to resolve vault configuration.
-            state_repo: Repository for tracking vault state, execution history
-                and fee/reward snapshots.
+        The repositories are kept as simple module-level facades so we don't
+        need explicit DI wiring here.
         """
         self._vault_repo = vault_repo
         self._state_repo = state_repo
@@ -69,7 +69,7 @@ class VaultsBatchUseCase:
         req: PancakeBatchRequest,
     ) -> dict[str, Any]:
         """
-        Execute a full Pancake v3 batch pipeline:
+        Execute a full Pancake v3 batch pipeline on a ClientVault:
 
         1) Unstake the vault position from the gauge, if a gauge is configured
            and the position is currently staked.
@@ -82,7 +82,8 @@ class VaultsBatchUseCase:
            human prices.
 
         This is all performed in a single on-chain transaction using the
-        `fn_batch_unstake_exit_swap_open_pancake` helper on the adapter.
+        ClientVault's `autoRebalancePancake(params)` entrypoint, wrapped by
+        the adapter helper `fn_auto_rebalance_pancake`.
 
         Args:
             alias: Vault alias (must be a Pancake vault).
@@ -132,6 +133,7 @@ class VaultsBatchUseCase:
 
         self._state_repo.ensure_state_initialized(dex, alias, vault_address=v["address"])
 
+        # Adapter bound to the ClientVault
         ad_vault = get_adapter_for(
             dex,
             v["pool"],
@@ -141,9 +143,11 @@ class VaultsBatchUseCase:
             v.get("gauge"),
         )
 
+        # Separate adapter instance for the swap reference pool (can be override)
         pool_addr = resolve_pool_from_vault(v, req.pool_override)
         ad_pc = get_adapter_for(dex, pool_addr, None, v["address"], v.get("rpc_url"))
 
+        # Snapshot before the operation (status panel)
         try:
             before = snapshot_status(ad_vault, dex, alias)
         except Exception:  # noqa: BLE001
@@ -177,6 +181,7 @@ class VaultsBatchUseCase:
                 return 1.0 / float(ui_price)
             return float(ui_price)
 
+        # -------- Range: ticks or prices -> ticks aligned to spacing --------
         lower_tick = req.lower_tick
         upper_tick = req.upper_tick
 
@@ -210,6 +215,7 @@ class VaultsBatchUseCase:
             upper_tick = align_ceil(int(upper_tick), spacing)
 
         if lower_tick == upper_tick:
+            # Ensure non-zero width even if user picks a degenerate range
             lower_tick -= spacing or 1
             upper_tick += spacing or 1
 
@@ -228,6 +234,7 @@ class VaultsBatchUseCase:
                 400, f"Width too large: {width} > maxWidth={cons['maxWidth']}."
             )
 
+        # -------- Swap leg: resolve amount_in (token or USD) --------
         dec_in = int(ad_vault.erc20(req.token_in).functions.decimals().call())
         dec_out = int(ad_vault.erc20(req.token_out).functions.decimals().call())
 
@@ -241,9 +248,11 @@ class VaultsBatchUseCase:
         amount_in_raw: int
 
         if req.amount_in is not None:
+            # Direct token amount
             amount_in_raw = int(float(req.amount_in) * (10**dec_in))
             resolved_mode = "token"
         elif req.amount_in_usd is not None:
+            # USD amount -> token amount (supports ETH/WETH or USDC as token_in)
             usdc_per_eth = None
             if _is_usdc(sym1_s) and _is_eth(sym0_s):
                 usdc_per_eth = p_t1_t0_swap
@@ -271,12 +280,14 @@ class VaultsBatchUseCase:
                     "amount_in_usd is only supported when token_in is WETH/ETH or USDC.",
                 )
         else:
+            # No swap leg: amount_in_raw = 0
             amount_in_raw = 0
             resolved_mode = "none"
 
         if amount_in_raw < 0:
             raise HTTPException(400, "amount_in must be >= 0")
 
+        # -------- Quoter call to get amount_out and fee --------
         fee_used: Optional[int] = None
         amount_out_raw = 0
         min_out_raw = 0
@@ -284,21 +295,6 @@ class VaultsBatchUseCase:
         pool_used = pool_addr
 
         if amount_in_raw > 0:
-
-            quote = (
-                # reuse the HTTP-level shape through the swap use case if you want
-                # or keep calling the pure helper as here
-                # - here we call the same helper used by the HTTP route:
-                #   pancake_swap_quote(alias, ...)
-                # - since this use case is self-contained, we just call the quoter
-                #   logic already wrapped in VaultsSwapUseCase if you prefer.
-                None
-            )
-
-            # Para não depender circularmente de VaultsSwapUseCase aqui,
-            # mantemos a lógica exatamente como estava, reusando o endpoint
-            # original sinteticamente:
-
             swap_uc = VaultsSwapUseCase()
             quote = swap_uc.pancake_swap_quote(
                 alias,
@@ -327,20 +323,23 @@ class VaultsBatchUseCase:
             value_at_sqrt_after_usd = float(quote["value_at_sqrt_after_usd"])
             pool_used = quote.get("pool_used", pool_addr)
         else:
+            # No swap: use underlying pool fee as neutral value
             fee_used = int(ad_pc.pool_contract().functions.fee().call())
 
+        # -------- Build ClientVault.autoRebalancePancake(...) call --------
         router_addr = Web3.to_checksum_address(s.PANCAKE_V3_ROUTER)
 
-        fn = ad_vault.fn_batch_unstake_exit_swap_open_pancake(
-            router=router_addr,
+        # A função no ClientVault assume que o executor vai cuidar de qualquer
+        # lógica de aprovação do router/adapter fora deste fluxo.
+        fn = ad_vault.fn_auto_rebalance_pancake(
+            new_lower=int(lower_tick),
+            new_upper=int(upper_tick),
+            fee=int(fee_used),
             token_in=req.token_in,
             token_out=req.token_out,
-            fee=fee_used,
-            amount_in_raw=amount_in_raw,
-            min_out_raw=min_out_raw,
+            swap_amount_in=int(amount_in_raw),
+            swap_amount_out_min=int(min_out_raw),
             sqrt_price_limit_x96=int(req.sqrt_price_limit_x96 or 0),
-            lower_tick=int(lower_tick),
-            upper_tick=int(upper_tick),
         )
 
         eth_usd_hint = estimate_eth_usd_from_pool(ad_pc)
@@ -370,6 +369,7 @@ class VaultsBatchUseCase:
                 },
             ) from exc
 
+        # -------- Fees bookkeeping (same lógica antiga) --------
         try:
             fees_info = (before or {}).get("fees_uncollected") or {}
             fees0_h = float(fees_info.get("token0") or 0.0)
@@ -417,6 +417,7 @@ class VaultsBatchUseCase:
                 exc,
             )
 
+        # -------- Gas / receipts / snapshots --------
         rcpt = send_res.get("receipt") or {}
         gas_used = int(rcpt.get("gasUsed") or 0)
         eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)

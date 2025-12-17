@@ -1211,11 +1211,164 @@ def unstake_nft_uc(dex: str, alias: str, req: UnstakeRequest) -> dict:
 
 def claim_rewards_uc(dex: str, alias: str, req: ClaimRewardsRequest) -> dict:
     """
-    TODO: Move the current body of claim_rewards (from your original vaults.py)
-    into this function, following the same pattern as stake/unstake.
+    Claim gauge / staking rewards for a given vault.
 
-    Keeping a stub here so the HTTP route can call this usecase.
+    A lógica segue o mesmo padrão de stake/unstake/withdraw:
+      - Resolve o vault e o adapter.
+      - Garante que o estado está inicializado.
+      - Tira snapshot "before".
+      - Envia a tx de claim com budget opcional em USD.
+      - Calcula gas em ETH/USD (se possível).
+      - Tira snapshot "after".
+      - Registra tudo em exec_history.
+
+    Requisitos:
+      - O adapter deve expor um método `fn_claim_rewards()`.
+      - Caso o DEX não suporte rewards, o adapter simplesmente não terá
+        esse método e retornamos 400.
     """
-    raise NotImplementedError(
-        "Move the existing claim_rewards logic from the old routes/vaults.py into claim_rewards_uc."
+    v = vault_repo.get_vault(dex, alias)
+    if not v:
+        raise HTTPException(404, "Unknown alias")
+    if not v.get("pool"):
+        raise HTTPException(400, "Vault has no pool set")
+
+    # garante estado no repo
+    state_repo.ensure_state_initialized(dex, alias, vault_address=v["address"])
+
+    ad = get_adapter_for(
+        dex,
+        v["pool"],
+        v.get("nfpm"),
+        v["address"],
+        v.get("rpc_url"),
+        v.get("gauge"),
     )
+
+    if not hasattr(ad, "fn_claim_rewards"):
+        # Se você quiser tratar por DEX, pode trocar essa mensagem por algo
+        # mais específico (ex.: "Claim not supported for Uniswap").
+        raise HTTPException(400, "Claim rewards not supported for this DEX/adapter")
+
+    before = snapshot_status(ad, dex, alias)
+
+    eth_usd_hint = estimate_eth_usd_from_pool(ad)
+    max_budget_usd = getattr(req, "max_budget_usd", None)
+
+    txs = TxService(v.get("rpc_url"))
+    fn = ad.fn_claim_rewards()
+
+    try:
+        send_res = txs.send(
+            fn,
+            wait=True,
+            gas_strategy="buffered",
+            max_gas_usd=max_budget_usd,
+            eth_usd_hint=eth_usd_hint,
+        )
+    except TransactionBudgetExceededError as e:
+        payload = {
+            "tx_hash": None,
+            "broadcasted": False,
+            "status": None,
+            "error_type": "BUDGET_EXCEEDED",
+            "error_msg": "Gas cost upper bound is above allowed max_gas_usd",
+            "budget_info": {
+                "usd_budget": e.usd_budget,
+                "usd_estimated_upper_bound": e.usd_estimated,
+                "eth_usd_hint": e.eth_usd,
+                "gas_price_wei": e.gas_price_wei,
+                "est_gas_limit": e.est_gas_limit,
+            },
+        }
+        state_repo.append_history(
+            dex,
+            alias,
+            "exec_history",
+            {
+                "ts": datetime.utcnow().isoformat(),
+                "mode": "claim_rewards_failed_budget",
+                "payload": payload,
+            },
+        )
+        raise HTTPException(status_code=400, detail=payload)
+
+    except TransactionRevertedError as e:
+        rcpt = e.receipt or {}
+        gas_used = int(rcpt.get("gasUsed") or 0)
+        eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)
+
+        gas_eth = gas_usd = None
+        if gas_used and eff_price_wei and eth_usd_hint:
+            gas_eth = float(
+                (Decimal(gas_used) * Decimal(eff_price_wei)) / Decimal(10**18)
+            )
+            gas_usd = gas_eth * float(eth_usd_hint)
+
+        payload = {
+            "tx_hash": e.tx_hash,
+            "broadcasted": True,
+            "status": 0,
+            "error_type": "ONCHAIN_REVERT",
+            "error_msg": e.msg,
+            "receipt": rcpt,
+            "gas_used": gas_used,
+            "effective_gas_price_wei": eff_price_wei,
+            "gas_eth": gas_eth,
+            "gas_usd": gas_usd,
+        }
+
+        state_repo.append_history(
+            dex,
+            alias,
+            "exec_history",
+            {
+                "ts": datetime.utcnow().isoformat(),
+                "mode": "claim_rewards_failed_revert",
+                "payload": payload,
+            },
+        )
+
+        raise HTTPException(status_code=502, detail=payload)
+
+    rcpt = send_res.get("receipt") or {}
+    gas_used = int(rcpt.get("gasUsed") or 0)
+    eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)
+
+    gas_eth = gas_usd = None
+    if gas_used and eff_price_wei and eth_usd_hint:
+        gas_eth = float(
+            (Decimal(gas_used) * Decimal(eff_price_wei)) / Decimal(10**18)
+        )
+        gas_usd = gas_eth * float(eth_usd_hint)
+
+    after = snapshot_status(ad, dex, alias)
+
+    state_repo.append_history(
+        dex,
+        alias,
+        "exec_history",
+        {
+            "ts": datetime.utcnow().isoformat(),
+            "mode": "claim_rewards",
+            "tx": send_res["tx_hash"],
+            "gas_used": gas_used,
+            "effective_gas_price_wei": eff_price_wei,
+            "gas_eth": gas_eth,
+            "gas_usd": gas_usd,
+            "gas_budget_check": send_res.get("gas_budget_check"),
+            "send_res": send_res,
+        },
+    )
+
+    return {
+        "tx": send_res["tx_hash"],
+        "gas_used": gas_used,
+        "effective_gas_price_wei": eff_price_wei,
+        "gas_eth": gas_eth,
+        "gas_usd": gas_usd,
+        "budget": send_res.get("gas_budget_check"),
+        "before": before,
+        "after": after,
+        "send_res": send_res,
+    }
