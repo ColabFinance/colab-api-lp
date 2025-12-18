@@ -19,7 +19,7 @@ def get_use_case() -> VaultStrategyRegistryUseCase:
 
 
 @router.get(
-    "/strategies/{strategy_id}",
+    "/admin/strategies/{strategy_id}",
     response_model=StrategyOnchainOut,
     summary="Ler metadados de uma Strategy direto do contrato StrategyRegistry",
 )
@@ -48,7 +48,7 @@ async def get_strategy_onchain(
 
 
 @router.post(
-    "/strategies/register",
+    "/admin/strategies/register",
     summary="Executar StrategyRegistry.registerStrategy (backend assina, onlyOwner)",
 )
 async def register_strategy(
@@ -81,7 +81,7 @@ async def register_strategy(
 
 
 @router.post(
-    "/strategies/update",
+    "/admin/strategies/update",
     summary="Executar StrategyRegistry.updateStrategy (backend assina, onlyOwner)",
 )
 async def update_strategy(
@@ -114,7 +114,7 @@ async def update_strategy(
 
 
 @router.post(
-    "/strategies/set-active",
+    "/admin/strategies/set-active",
     summary="Executar StrategyRegistry.setStrategyActive (backend assina, onlyOwner)",
 )
 async def set_strategy_active(

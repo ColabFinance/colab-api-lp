@@ -1,41 +1,5 @@
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
-
-
-class TxEnvelopeResponse(BaseModel):
-    """
-    Envelope genérico para tx EVM:
-    - to, data, value, chain_id
-    """
-
-    to: str
-    data: str
-    value: int
-    chain_id: int
-
-
-class CreateVaultTxRequest(BaseModel):
-    strategy_id: int = Field(..., ge=1)
-    user_wallet: str = Field(
-        ...,
-        description="EOA do usuário (quem vai assinar a tx de createClientVault).",
-    )
-
-
-class SetExecutorTxRequest(BaseModel):
-    admin_wallet: str
-    new_executor: str
-
-
-class SetFeeCollectorTxRequest(BaseModel):
-    admin_wallet: str
-    new_collector: str
-
-
-class SetDefaultsTxRequest(BaseModel):
-    admin_wallet: str
-    cooldown_sec: int = Field(..., ge=0)
-    max_slippage_bps: int = Field(..., ge=0, le=10_000)
-    allow_swap: bool
 
 
 class FactoryConfigOut(BaseModel):
@@ -44,3 +8,39 @@ class FactoryConfigOut(BaseModel):
     defaultCooldownSec: int
     defaultMaxSlippageBps: int
     defaultAllowSwap: bool
+
+
+class CreateClientVaultRequest(BaseModel):
+    strategy_id: int = Field(..., ge=1)
+    owner_override: Optional[str] = Field(
+        default=None,
+        description="Se quiser criar vault para outro owner. Se None, usa msg.sender do signer (backend PK).",
+    )
+    gas_strategy: str = Field(default="buffered", description="default|buffered|aggressive")
+
+
+class SetExecutorRequest(BaseModel):
+    new_executor: str
+    gas_strategy: str = Field(default="buffered")
+
+
+class SetFeeCollectorRequest(BaseModel):
+    new_collector: str
+    gas_strategy: str = Field(default="buffered")
+
+
+class SetDefaultsRequest(BaseModel):
+    cooldown_sec: int = Field(..., ge=0)
+    max_slippage_bps: int = Field(..., ge=0, le=10_000)
+    allow_swap: bool
+    gas_strategy: str = Field(default="buffered")
+
+
+class TxRunResponse(BaseModel):
+    tx_hash: str
+    broadcasted: bool
+    receipt: Optional[Dict[str, Any]] = None
+    status: Optional[int] = None
+    gas_limit_used: int
+    gas_price_wei: int
+    gas_budget_check: Dict[str, Any]

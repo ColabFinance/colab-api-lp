@@ -1,8 +1,4 @@
-# core/use_cases/vaults_factory_usecase.py
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from decimal import Decimal
-
 from web3 import Web3
 
 from config import get_settings
@@ -66,25 +62,19 @@ class VaultStrategyRegistryUseCase:
             description=description,
         )
 
-        send_res = self.txs.send(fn, wait=True, gas_strategy="buffered")
-        rcpt = send_res.get("receipt") or {}
+        res = self.txs.send(fn, wait=True, gas_strategy="buffered")
+        strategy_id = self.registry.parse_strategy_registered_strategy_id(res.get("receipt") or {})
 
-        strategy_id = self.registry.parse_strategy_registered_strategy_id(rcpt)
-        gas_used = int(rcpt.get("gasUsed") or 0)
-        eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)
-
-        gas_eth = None
-        if gas_used and eff_price_wei:
-            gas_eth = float((Decimal(gas_used) * Decimal(eff_price_wei)) / Decimal(10**18))
-
-        return {
-            "tx": send_res["tx_hash"],
+        res["result"] = {
             "strategy_id": strategy_id,
-            "gas_used": gas_used,
-            "effective_gas_price_wei": eff_price_wei,
-            "gas_eth": gas_eth,
-            "ts": datetime.now(UTC).isoformat(),
+            "adapter": adapter,
+            "dex_router": dex_router,
+            "token0": token0,
+            "token1": token1,
+            "name": name,
+            "description": description,
         }
+        return res
 
     def update_strategy(
         self,
@@ -107,44 +97,21 @@ class VaultStrategyRegistryUseCase:
             description=description,
         )
 
-        send_res = self.txs.send(fn, wait=True, gas_strategy="buffered")
-        rcpt = send_res.get("receipt") or {}
-
-        gas_used = int(rcpt.get("gasUsed") or 0)
-        eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)
-
-        gas_eth = None
-        if gas_used and eff_price_wei:
-            gas_eth = float((Decimal(gas_used) * Decimal(eff_price_wei)) / Decimal(10**18))
-
-        return {
-            "tx": send_res["tx_hash"],
+        res = self.txs.send(fn, wait=True, gas_strategy="buffered")
+        res["result"] = {
             "strategy_id": int(strategy_id),
-            "gas_used": gas_used,
-            "effective_gas_price_wei": eff_price_wei,
-            "gas_eth": gas_eth,
-            "ts": datetime.now(UTC).isoformat(),
+            "adapter": adapter,
+            "dex_router": dex_router,
+            "token0": token0,
+            "token1": token1,
+            "name": name,
+            "description": description,
         }
+        return res
 
     def set_strategy_active(self, *, strategy_id: int, active: bool) -> dict:
         fn = self.registry.fn_set_strategy_active(strategy_id=strategy_id, active=active)
 
-        send_res = self.txs.send(fn, wait=True, gas_strategy="buffered")
-        rcpt = send_res.get("receipt") or {}
-
-        gas_used = int(rcpt.get("gasUsed") or 0)
-        eff_price_wei = int(rcpt.get("effectiveGasPrice") or 0)
-
-        gas_eth = None
-        if gas_used and eff_price_wei:
-            gas_eth = float((Decimal(gas_used) * Decimal(eff_price_wei)) / Decimal(10**18))
-
-        return {
-            "tx": send_res["tx_hash"],
-            "strategy_id": int(strategy_id),
-            "active": bool(active),
-            "gas_used": gas_used,
-            "effective_gas_price_wei": eff_price_wei,
-            "gas_eth": gas_eth,
-            "ts": datetime.now(UTC).isoformat(),
-        }
+        res = self.txs.send(fn, wait=True, gas_strategy="buffered")
+        res["result"] = {"strategy_id": int(strategy_id), "active": bool(active)}
+        return res

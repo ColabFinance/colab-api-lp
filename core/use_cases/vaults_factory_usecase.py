@@ -1,171 +1,83 @@
-# core/use_cases/vaults_factory_usecase.py
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 from web3 import Web3
 
 from config import get_settings
 from adapters.chain.strategy_registry import StrategyRegistryAdapter
 from adapters.chain.vault_factory import VaultFactoryAdapter
+from core.services.tx_service import TxService
 
 
 @dataclass
 class VaultFactoryUseCase:
-    """
-    Orquestra StrategyRegistry + VaultFactory.
-
-    - Leituras de Strategy (getStrategy)
-    - Tx de criação de ClientVault (user)
-    - Tx admin de Strategy (register/update/active)
-    - Tx admin de VaultFactory (executor/defaults/feeCollector)
-    """
-
     w3: Web3
     registry: StrategyRegistryAdapter
     factory: VaultFactoryAdapter
+    txs: TxService
 
     @classmethod
     def from_settings(cls) -> "VaultFactoryUseCase":
-        settings = get_settings()
-        w3 = Web3(Web3.HTTPProvider(settings.RPC_URL_DEFAULT))
+        s = get_settings()
+        w3 = Web3(Web3.HTTPProvider(s.RPC_URL_DEFAULT))
+        registry = StrategyRegistryAdapter(w3=w3, address=s.STRATEGY_REGISTRY_ADDRESS)
+        factory = VaultFactoryAdapter(w3=w3, address=s.VAULT_FACTORY_ADDRESS)
+        txs = TxService(s.RPC_URL_DEFAULT)
+        return cls(w3=w3, registry=registry, factory=factory, txs=txs)
 
-        registry = StrategyRegistryAdapter(
-            w3=w3, address=settings.STRATEGY_REGISTRY_ADDRESS
-        )
-        factory = VaultFactoryAdapter(
-            w3=w3, address=settings.VAULT_FACTORY_ADDRESS
-        )
+    # ---------------- views ----------------
 
-        return cls(w3=w3, registry=registry, factory=factory)
-
-    # ------------------------------------------------------------------ #
-    # Registry - views
-    # ------------------------------------------------------------------ #
-
-    def get_strategy(self, strategy_id: int) -> dict:
-        return self.registry.get_strategy(strategy_id)
-
-    def is_strategy_active(self, strategy_id: int) -> bool:
-        return self.registry.is_strategy_active(strategy_id)
-
-    # ------------------------------------------------------------------ #
-    # Registry - admin tx
-    # ------------------------------------------------------------------ #
-
-    def build_register_strategy_tx(
-        self,
-        *,
-        admin_wallet: str,
-        adapter: str,
-        dex_router: str,
-        token0: str,
-        token1: str,
-        name: str,
-        description: str,
-    ) -> dict:
-        return self.registry.build_register_strategy_tx(
-            admin_wallet=admin_wallet,
-            adapter=adapter,
-            dex_router=dex_router,
-            token0=token0,
-            token1=token1,
-            name=name,
-            description=description,
-        )
-
-    def build_update_strategy_tx(
-        self,
-        *,
-        admin_wallet: str,
-        strategy_id: int,
-        adapter: str,
-        dex_router: str,
-        token0: str,
-        token1: str,
-        name: str,
-        description: str,
-    ) -> dict:
-        return self.registry.build_update_strategy_tx(
-            admin_wallet=admin_wallet,
-            strategy_id=strategy_id,
-            adapter=adapter,
-            dex_router=dex_router,
-            token0=token0,
-            token1=token1,
-            name=name,
-            description=description,
-        )
-
-    def build_set_strategy_active_tx(
-        self,
-        *,
-        admin_wallet: str,
-        strategy_id: int,
-        active: bool,
-    ) -> dict:
-        return self.registry.build_set_strategy_active_tx(
-            admin_wallet=admin_wallet,
-            strategy_id=strategy_id,
-            active=active,
-        )
-
-    # ------------------------------------------------------------------ #
-    # Factory - views
-    # ------------------------------------------------------------------ #
-
-    def get_factory_config(self) -> dict:
+    def get_factory_config(self) -> Dict[str, Any]:
         return self.factory.get_config()
 
-    # ------------------------------------------------------------------ #
-    # Factory - user tx
-    # ------------------------------------------------------------------ #
+    # ---------------- tx runners (signed by backend PK) ----------------
 
-    def build_create_vault_tx(self, strategy_id: int, user_wallet: str) -> dict:
+    def create_client_vault(
+        self,
+        *,
+        strategy_id: int,
+        owner_override: Optional[str] = None,
+        gas_strategy: str = "buffered",
+    ) -> Dict[str, Any]:
         if not self.registry.is_strategy_active(strategy_id):
             raise ValueError("Strategy not active or does not exist on-chain")
 
-        tx = self.factory.build_create_client_vault_tx(
-            strategy_id=strategy_id,
-            user_wallet=user_wallet,
-        )
-        return tx
+        fn = self.factory.fn_create_client_vault(strategy_id=strategy_id, owner_override=owner_override)
+        res = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
 
-    # ------------------------------------------------------------------ #
-    # Factory - admin tx
-    # ------------------------------------------------------------------ #
+        # se você tiver evento VaultCreated, aqui você parseia e coloca vault_address.
+        res["result"] = {
+            "strategy_id": int(strategy_id),
+            "owner_override": owner_override,
+            "vault_address": None,
+        }
+        return res
 
-    def build_set_executor_tx(
+    def set_executor(self, *, new_executor: str, gas_strategy: str = "buffered") -> Dict[str, Any]:
+        fn = self.factory.fn_set_executor(new_executor=new_executor)
+        res = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
+        res["result"] = {"new_executor": new_executor}
+        return res
+
+    def set_fee_collector(self, *, new_collector: str, gas_strategy: str = "buffered") -> Dict[str, Any]:
+        fn = self.factory.fn_set_fee_collector(new_collector=new_collector)
+        res = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
+        res["result"] = {"new_collector": new_collector}
+        return res
+
+    def set_defaults(
         self,
         *,
-        admin_wallet: str,
-        new_executor: str,
-    ) -> dict:
-        return self.factory.build_set_executor_tx(
-            admin_wallet=admin_wallet,
-            new_executor=new_executor,
-        )
-
-    def build_set_fee_collector_tx(
-        self,
-        *,
-        admin_wallet: str,
-        new_collector: str,
-    ) -> dict:
-        return self.factory.build_set_fee_collector_tx(
-            admin_wallet=admin_wallet,
-            new_collector=new_collector,
-        )
-
-    def build_set_defaults_tx(
-        self,
-        *,
-        admin_wallet: str,
         cooldown_sec: int,
         max_slippage_bps: int,
         allow_swap: bool,
-    ) -> dict:
-        return self.factory.build_set_defaults_tx(
-            admin_wallet=admin_wallet,
-            cooldown_sec=cooldown_sec,
-            max_slippage_bps=max_slippage_bps,
-            allow_swap=allow_swap,
-        )
+        gas_strategy: str = "buffered",
+    ) -> Dict[str, Any]:
+        fn = self.factory.fn_set_defaults(cooldown_sec=cooldown_sec, max_slippage_bps=max_slippage_bps, allow_swap=allow_swap)
+        res = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
+        res["result"] = {
+            "cooldown_sec": int(cooldown_sec),
+            "max_slippage_bps": int(max_slippage_bps),
+            "allow_swap": bool(allow_swap),
+        }
+        return res
