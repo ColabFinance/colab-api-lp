@@ -41,6 +41,6 @@ class TxRunResponse(BaseModel):
     broadcasted: bool
     receipt: Optional[Dict[str, Any]] = None
     status: Optional[int] = None
-    gas_limit_used: int
-    gas_price_wei: int
-    gas_budget_check: Dict[str, Any]
+    gas_limit_used: Optional[int] = None
+    gas_price_wei: Optional[int] = None
+    gas_budget_check: Optional[Dict[str, Any]] = None

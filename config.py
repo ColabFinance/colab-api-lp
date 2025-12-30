@@ -62,7 +62,7 @@ def get_settings() -> Settings:
         AERO_TICK_SPACINGS = os.getenv("AERO_TICK_SPACINGS","1,10,100"),
         
         PRIVATE_KEY=os.environ.get("PRIVATE_KEY", ""),  # keep empty when missing
-        RPC_URL_DEFAULT=os.environ["RPC_SEPOLIA"],
+        RPC_URL_DEFAULT=os.environ.get("RPC_SEPOLIA", ""),
         STABLE_TOKEN_ADDRESSES=os.environ.get("STABLE_TOKEN_ADDRESSES",[
                                                             "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                                                             "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
