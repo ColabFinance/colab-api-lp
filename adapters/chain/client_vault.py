@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Tuple
 from web3 import Web3
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
@@ -18,12 +18,43 @@ ABI_CLIENT_VAULT = [
     {"name": "lastRebalanceTs", "inputs": [], "outputs": [{"type": "uint256"}], "stateMutability": "view", "type": "function"},
     {"name": "tokens", "inputs": [], "outputs": [{"type": "address"}, {"type": "address"}], "stateMutability": "view", "type": "function"},
 
-    # ---- tx
+    # ---- owner tx
     {"name": "setAutomationEnabled", "inputs": [{"type": "bool", "name": "enabled"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "setAutomationConfig", "inputs": [{"type": "uint32", "name": "cooldownSec"}, {"type": "uint16", "name": "maxSlippageBps"}, {"type": "bool", "name": "allowSwap"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "collectToVault", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "exitPositionToVault", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "exitPositionAndWithdrawAll", "inputs": [{"type": "address", "name": "to"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+
+    # ---- owner tx (missing in front)
+    {"name": "openInitialPosition", "inputs": [{"type": "int24", "name": "lowerTick"}, {"type": "int24", "name": "upperTick"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"name": "rebalanceWithCaps", "inputs": [{"type": "int24", "name": "lowerTick"}, {"type": "int24", "name": "upperTick"}, {"type": "uint256", "name": "cap0"}, {"type": "uint256", "name": "cap1"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"name": "stake", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"name": "unstake", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"name": "claimRewards", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"name": "swapExactInPancake", "inputs": [
+        {"type": "address", "name": "tokenIn"},
+        {"type": "address", "name": "tokenOut"},
+        {"type": "uint24", "name": "fee"},
+        {"type": "uint256", "name": "amountIn"},
+        {"type": "uint256", "name": "amountOutMin"},
+        {"type": "uint160", "name": "sqrtPriceLimitX96"},
+    ], "outputs": [{"type": "uint256", "name": "amountOut"}], "stateMutability": "nonpayable", "type": "function"},
+
+    # ---- NEW executor tx
+    {"name": "autoRebalancePancake", "inputs": [{
+        "name": "p",
+        "type": "tuple",
+        "components": [
+            {"type": "int24", "name": "newLowerTick"},
+            {"type": "int24", "name": "newUpperTick"},
+            {"type": "uint24", "name": "fee"},
+            {"type": "address", "name": "tokenIn"},
+            {"type": "address", "name": "tokenOut"},
+            {"type": "uint256", "name": "swapAmountIn"},
+            {"type": "uint256", "name": "swapAmountOutMin"},
+            {"type": "uint160", "name": "sqrtPriceLimitX96"},
+        ],
+    }], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
 ]
 
 
@@ -81,3 +112,50 @@ class ClientVaultAdapter:
 
     def fn_exit_withdraw_all(self, to_addr: str) -> ContractFunction:
         return self.contract.functions.exitPositionAndWithdrawAll(Web3.to_checksum_address(to_addr))
+
+    # ---- new owner tx builders
+    def fn_open_initial_position(self, lower_tick: int, upper_tick: int) -> ContractFunction:
+        return self.contract.functions.openInitialPosition(int(lower_tick), int(upper_tick))
+
+    def fn_rebalance_with_caps(self, lower_tick: int, upper_tick: int, cap0: int, cap1: int) -> ContractFunction:
+        return self.contract.functions.rebalanceWithCaps(int(lower_tick), int(upper_tick), int(cap0), int(cap1))
+
+    def fn_stake(self) -> ContractFunction:
+        return self.contract.functions.stake()
+
+    def fn_unstake(self) -> ContractFunction:
+        return self.contract.functions.unstake()
+
+    def fn_claim_rewards(self) -> ContractFunction:
+        return self.contract.functions.claimRewards()
+
+    def fn_swap_exact_in_pancake(
+        self,
+        token_in: str,
+        token_out: str,
+        fee: int,
+        amount_in: int,
+        amount_out_min: int,
+        sqrt_price_limit_x96: int,
+    ) -> ContractFunction:
+        return self.contract.functions.swapExactInPancake(
+            Web3.to_checksum_address(token_in),
+            Web3.to_checksum_address(token_out),
+            int(fee),
+            int(amount_in),
+            int(amount_out_min),
+            int(sqrt_price_limit_x96),
+        )
+
+    # ---- executor tx builder
+    def fn_auto_rebalance_pancake(self, p: dict) -> ContractFunction:
+        return self.contract.functions.autoRebalancePancake((
+            int(p["newLowerTick"]),
+            int(p["newUpperTick"]),
+            int(p["fee"]),
+            Web3.to_checksum_address(p["tokenIn"]),
+            Web3.to_checksum_address(p["tokenOut"]),
+            int(p["swapAmountIn"]),
+            int(p["swapAmountOutMin"]),
+            int(p["sqrtPriceLimitX96"]),
+        ))

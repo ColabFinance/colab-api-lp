@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 
 from adapters.entry.http.dtos.vaults_client_vault_dtos import (
+    AutoRebalancePancakeIn,
     ExitWithdrawRequest,
     SetAutomationConfigRequest,
     SetAutomationEnabledRequest,
@@ -128,3 +129,26 @@ async def exit_withdraw(alias: str, body: ExitWithdrawRequest, use_case: VaultCl
         raise HTTPException(status_code=500, detail={"error": "reverted_on_chain", "tx": exc.tx_hash, "receipt": exc.receipt}) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to exitWithdrawAll: {exc}") from exc
+
+
+@router.get("/{alias_or_address}/status")
+def get_vault_status(alias_or_address: str = Path(...)):
+    uc = VaultClientVaultUseCase.from_settings()
+    try:
+        return {"data": uc.get_status(alias_or_address=alias_or_address)}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/{alias_or_address}/auto-rebalance-pancake")
+def auto_rebalance_pancake(payload: AutoRebalancePancakeIn, alias_or_address: str = Path(...)):
+    uc = VaultClientVaultUseCase.from_settings()
+    try:
+        res = uc.auto_rebalance_pancake(
+            alias_or_address=alias_or_address,
+            params=payload.model_dump(exclude={"gas_strategy"}),
+            gas_strategy=payload.gas_strategy,
+        )
+        return {"data": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

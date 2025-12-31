@@ -112,3 +112,16 @@ class VaultStatusOut(BaseModel):
 
     # vault state
     last_rebalance_ts: int
+
+
+
+class AutoRebalancePancakeIn(BaseModel):
+    newLowerTick: int = Field(...)
+    newUpperTick: int = Field(...)
+    fee: int = Field(..., description="uint24")
+    tokenIn: str = Field(...)
+    tokenOut: str = Field(...)
+    swapAmountIn: int = Field(..., description="uint256")
+    swapAmountOutMin: int = Field(..., description="uint256")
+    sqrtPriceLimitX96: int = Field(..., description="uint160")
+    gas_strategy: str = Field(default="buffered")
