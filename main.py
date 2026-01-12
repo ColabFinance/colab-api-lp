@@ -12,7 +12,7 @@ from adapters.external.database.vault_state_repository import VaultStateReposito
 from adapters.entry.http.view.vaults_factory import router as vaults_factory_router
 from adapters.entry.http.view.vaults_strategy_registry import router as vaults_strategy_registry_router
 from adapters.entry.http.view.vaults_client_vault import router as vaults_client_vault_router
-
+from adapters.entry.http.view.admin.admin_view import router as admin_router
 
 def init_mongo_indexes() -> None:
     """
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
         
+    app.include_router(admin_router)
     app.include_router(vaults_factory_router, prefix="/api")
     app.include_router(vaults_strategy_registry_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")
