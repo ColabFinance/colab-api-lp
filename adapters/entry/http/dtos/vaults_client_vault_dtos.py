@@ -1,24 +1,6 @@
 from typing import Any, Dict, Optional, Literal
 from pydantic import BaseModel, Field
 
-
-class SetAutomationEnabledRequest(BaseModel):
-    enabled: bool
-    gas_strategy: str = Field(default="buffered")
-
-
-class SetAutomationConfigRequest(BaseModel):
-    cooldown_sec: int = Field(..., ge=0)
-    max_slippage_bps: int = Field(..., ge=0, le=10_000)
-    allow_swap: bool
-    gas_strategy: str = Field(default="buffered")
-
-
-class ExitWithdrawRequest(BaseModel):
-    to: str
-    gas_strategy: str = Field(default="buffered")
-
-
 class TxRunResponse(BaseModel):
     tx_hash: str
     broadcasted: bool
@@ -125,3 +107,12 @@ class AutoRebalancePancakeIn(BaseModel):
     swapAmountOutMin: int = Field(..., description="uint256")
     sqrtPriceLimitX96: int = Field(..., description="uint160")
     gas_strategy: str = Field(default="buffered")
+    
+    
+class CreateClientVaultRequest(BaseModel):
+    strategy_id: int = Field(..., ge=1)
+    owner_override: Optional[str] = Field(
+        default=None,
+        description="Se quiser criar vault para outro owner. Se None, usa msg.sender do signer (backend PK).",
+    )
+    gas_strategy: str = Field(default="buffered", description="default|buffered|aggressive")

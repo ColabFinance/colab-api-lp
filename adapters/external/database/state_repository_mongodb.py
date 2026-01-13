@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from adapters.external.database.vault_events_repository import VaultEventsRepository
+from adapters.external.database.vault_events_repository_mongodb import VaultEventsRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
 from core.domain.repositories.vault_events_repository_interface import VaultEventsRepositoryInterface
 from core.domain.repositories.vault_state_repository_interface import VaultStateRepositoryInterface
