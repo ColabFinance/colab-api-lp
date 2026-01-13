@@ -11,8 +11,15 @@ from core.services.tx_service import TxService
 
 @dataclass
 class VaultFactoryUseCase:
+    """
+    VaultFactory admin use case only.
+
+    Responsibilities:
+    - Read VaultFactory config
+    - Execute onlyOwner tx: setExecutor, setFeeCollector, setDefaults
+    """
+    
     w3: Web3
-    registry: StrategyRegistryAdapter
     factory: VaultFactoryAdapter
     txs: TxService
 
@@ -23,7 +30,7 @@ class VaultFactoryUseCase:
         registry = StrategyRegistryAdapter(w3=w3, address=s.STRATEGY_REGISTRY_ADDRESS)
         factory = VaultFactoryAdapter(w3=w3, address=s.VAULT_FACTORY_ADDRESS)
         txs = TxService(s.RPC_URL_DEFAULT)
-        return cls(w3=w3, registry=registry, factory=factory, txs=txs)
+        return cls(w3=w3, factory=factory, txs=txs)
 
     # ---------------- views ----------------
 
@@ -31,27 +38,6 @@ class VaultFactoryUseCase:
         return self.factory.get_config()
 
     # ---------------- tx runners (signed by backend PK) ----------------
-
-    def create_client_vault(
-        self,
-        *,
-        strategy_id: int,
-        owner_override: Optional[str] = None,
-        gas_strategy: str = "buffered",
-    ) -> Dict[str, Any]:
-        if not self.registry.is_strategy_active(strategy_id):
-            raise ValueError("Strategy not active or does not exist on-chain")
-
-        fn = self.factory.fn_create_client_vault(strategy_id=strategy_id, owner_override=owner_override)
-        res = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
-
-        # se você tiver evento VaultCreated, aqui você parseia e coloca vault_address.
-        res["result"] = {
-            "strategy_id": int(strategy_id),
-            "owner_override": owner_override,
-            "vault_address": None,
-        }
-        return res
 
     def set_executor(self, *, new_executor: str, gas_strategy: str = "buffered") -> Dict[str, Any]:
         fn = self.factory.fn_set_executor(new_executor=new_executor)

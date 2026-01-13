@@ -30,38 +30,6 @@ async def get_factory_config(use_case: VaultFactoryUseCase = Depends(get_use_cas
 
 
 @router.post(
-    "/factory/create-client-vault",
-    response_model=TxRunResponse,
-    summary="Executa createClientVault (assinando no backend PK) - estilo deposit_uc",
-)
-async def create_client_vault(
-    body: CreateClientVaultRequest,
-    use_case: VaultFactoryUseCase = Depends(get_use_case),
-):
-    try:
-        res = use_case.create_client_vault(
-            strategy_id=body.strategy_id,
-            owner_override=body.owner_override,
-            gas_strategy=body.gas_strategy,
-        )
-        return TxRunResponse(**res)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except TransactionRevertedError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "reverted_on_chain",
-                "tx": exc.tx_hash,
-                "receipt": exc.receipt,
-                "hint": "Possibly require() failed or out-of-gas.",
-            },
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to createClientVault: {exc}") from exc
-
-
-@router.post(
     "/admin/factory/set-executor",
     response_model=TxRunResponse,
     summary="Executa setExecutor (onlyOwner, assinando no backend PK)",

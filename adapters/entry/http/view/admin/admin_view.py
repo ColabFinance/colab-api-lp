@@ -1,40 +1,60 @@
-from __future__ import annotations
+from fastapi import APIRouter, Depends, HTTPException
 
-from fastapi import APIRouter, Depends
-
-from adapters.entry.http.view.admin.admin_auth import AdminPrincipal, require_admin
-from adapters.external.database.factory_repository import StrategyFactoryRepo, VaultFactoryRepo
+from adapters.entry.http.view.admin.admin_auth import require_admin, AdminPrincipal
+from adapters.entry.http.dtos.admin_factory_dtos import CreateFactoryRequest, FactoryRecordOut
+from core.use_cases.admin_factories_usecase import AdminFactoriesUseCase
+from core.services.exceptions import TransactionRevertedError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.post("/strategy-factory")
-async def create_strategy_factory(_: AdminPrincipal = Depends(require_admin)):
-    repo = StrategyFactoryRepo()
-    # payload can include chain, contract addresses, versioning, etc.
-    return repo.create_if_allowed(payload={"type": "strategy_factory"})
+def get_use_case() -> AdminFactoriesUseCase:
+    return AdminFactoriesUseCase.from_settings()
 
 
-@router.post("/vault-factory")
-async def create_vault_factory(_: AdminPrincipal = Depends(require_admin)):
-    repo = VaultFactoryRepo()
-    return repo.create_if_allowed(payload={"type": "vault_factory"})
+@router.post("/strategy-factory/create")
+async def create_strategy_factory(
+    body: CreateFactoryRequest,
+    _: AdminPrincipal = Depends(require_admin),
+    use_case: AdminFactoriesUseCase = Depends(get_use_case),
+):
+    try:
+        return use_case.create_strategy_factory(gas_strategy=body.gas_strategy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TransactionRevertedError as exc:
+        raise HTTPException(status_code=500, detail={"error": "reverted_on_chain", "tx": exc.tx_hash, "receipt": exc.receipt}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to create strategy factory: {exc}") from exc
 
 
-@router.get("/owners")
-async def list_owners(_: AdminPrincipal = Depends(require_admin)):
-    """
-    Current implementation: best-effort owners list derived from Mongo vault registry/state.
-    If you don't have a dedicated collection yet, return an empty list.
-    """
-    # TODO: implement using vault_registry_repository / vault_repo.
-    return []
+@router.post("/vault-factory/create")
+async def create_vault_factory(
+    body: CreateFactoryRequest,
+    _: AdminPrincipal = Depends(require_admin),
+    use_case: AdminFactoriesUseCase = Depends(get_use_case),
+):
+    try:
+        return use_case.create_vault_factory(gas_strategy=body.gas_strategy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TransactionRevertedError as exc:
+        raise HTTPException(status_code=500, detail={"error": "reverted_on_chain", "tx": exc.tx_hash, "receipt": exc.receipt}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to create vault factory: {exc}") from exc
 
 
-@router.get("/users")
-async def list_users(_: AdminPrincipal = Depends(require_admin)):
-    """
-    Temporary alias:
-    - Until api-lp persists Privy users, return the same as owners.
-    """
-    return []
+@router.get("/strategy-factory/list", response_model=list[FactoryRecordOut])
+async def list_strategy_factories(
+    _: AdminPrincipal = Depends(require_admin),
+    use_case: AdminFactoriesUseCase = Depends(get_use_case),
+):
+    return use_case.list_strategy_factories(limit=50)
+
+
+@router.get("/vault-factory/list", response_model=list[FactoryRecordOut])
+async def list_vault_factories(
+    _: AdminPrincipal = Depends(require_admin),
+    use_case: AdminFactoriesUseCase = Depends(get_use_case),
+):
+    return use_case.list_vault_factories(limit=50)
