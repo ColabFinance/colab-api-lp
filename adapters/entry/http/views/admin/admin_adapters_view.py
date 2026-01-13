@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from adapters.entry.http.view.admin.admin_auth import require_admin, AdminPrincipal
+from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
 from adapters.entry.http.dtos.admin_adapter_dtos import CreateAdapterRequest
 from core.use_cases.admin_adapters_usecase import AdminAdaptersUseCase
 from core.services.exceptions import TransactionRevertedError

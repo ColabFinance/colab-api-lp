@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from adapters.external.database.vault_events_repository_mongodb import VaultEventsRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
-from adapters.entry.http.view.client_vault_view import router as vaults_client_vault_router
-from adapters.entry.http.view.admin.admin_view import router as admin_router
+from adapters.entry.http.views.client_vault_view import router as vaults_client_vault_router
+from adapters.entry.http.views.admin.admin_view import router as admin_router
 
 def init_mongo_indexes() -> None:
     """
