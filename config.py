@@ -50,15 +50,10 @@ class Settings:
     VAULT_FACTORY_ADDRESS: str
 
     # ---- Admin / Privy Auth (NEW) ----
-    PRIVY_APP_ID: str = Field(default="", description="Privy App ID (aud claim).")
-    PRIVY_JWKS_URL: str = Field(
-        default="https://auth.privy.io/api/v1/apps/jwks",
-        description="Privy JWKS endpoint used to verify access tokens.",
-    )
-    ADMIN_WALLETS: str = Field(
-        default="",
-        description="Comma-separated list of admin wallet addresses (0x...).",
-    )
+    PRIVY_APP_ID: str
+    PRIVY_APP_SECRET: str
+    PRIVY_JWKS_URL: str
+    ADMIN_WALLETS: str 
 
     # data roots (simulate DB)
     DATA_ROOT: str = "data"
@@ -124,4 +119,5 @@ def get_settings() -> Settings:
         PRIVY_APP_ID=os.getenv("PRIVY_APP_ID", ""),
         PRIVY_JWKS_URL=os.getenv("PRIVY_JWKS_URL", "https://auth.privy.io/api/v1/apps/jwks"),
         ADMIN_WALLETS=os.getenv("ADMIN_WALLETS", ""),
+        PRIVY_APP_SECRET=os.getenv("PRIVY_APP_SECRET", ""),
     )

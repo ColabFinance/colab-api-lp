@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Set
+from typing import Any, Optional, Set
 
-import requests
-import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from privy import PrivyAPI
 
 from config import get_settings
 
@@ -30,49 +28,95 @@ def _admin_allowlist() -> Set[str]:
     return {x.strip().lower() for x in (s.ADMIN_WALLETS or "").split(",") if x.strip()}
 
 
-_jwks_cache: Dict[str, Any] = {"ts": 0, "jwks": None}
-
-
-def _get_jwks() -> Dict[str, Any]:
+@lru_cache(maxsize=1)
+def _privy_client() -> PrivyAPI:
     s = get_settings()
-    now = int(time.time())
+    if not getattr(s, "PRIVY_APP_ID", None):
+        raise RuntimeError("Missing settings.PRIVY_APP_ID")
+    if not getattr(s, "PRIVY_APP_SECRET", None):
+        raise RuntimeError("Missing settings.PRIVY_APP_SECRET")
 
-    # Cache for 10 minutes
-    if _jwks_cache["jwks"] and (now - int(_jwks_cache["ts"])) < 600:
-        return _jwks_cache["jwks"]
-
-    r = requests.get(s.PRIVY_JWKS_URL, timeout=10)
-    if r.status_code != 200:
-        raise HTTPException(status_code=503, detail="Failed to fetch JWKS for token verification.")
-
-    jwks = r.json()
-    _jwks_cache["jwks"] = jwks
-    _jwks_cache["ts"] = now
-    return jwks
+    # app_secret = Privy API Key (dashboard)
+    return PrivyAPI(app_id=s.PRIVY_APP_ID, app_secret=s.PRIVY_APP_SECRET)
 
 
-def _select_jwk(jwks: Dict[str, Any], kid: str) -> Optional[Dict[str, Any]]:
-    for k in jwks.get("keys", []):
-        if k.get("kid") == kid:
-            return k
-    return None
-
-
-def _extract_wallet_from_claims(claims: Dict[str, Any]) -> str:
+def _extract_wallet_from_privy_user(user: Any) -> str:
     """
-    Best-effort extraction:
-    - Prefer a direct wallet claim if present.
-    - Otherwise, fallback to empty string.
+    Extracts an Ethereum address from a Privy "user" object/dict.
 
-    NOTE: You may want to customize this to match the exact claims structure
-    you rely on (e.g. embedded wallet address, linked wallets, etc.).
+    We check common SDK shapes:
+      - user.linked_accounts: [{type:"wallet", address:"0x..."}, ...]
+      - user.wallet: {address:"0x..."}
+      - user.wallets: [{address:"0x..."}, ...]
     """
-    # Common patterns in JWT payloads across providers:
-    for key in ["wallet_address", "address", "wallet", "user_wallet"]:
-        v = claims.get(key)
+    def get(obj: Any, key: str) -> Any:
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
+    # 1) direct-ish
+    for key in ["wallet_address", "address"]:
+        v = get(user, key)
         if isinstance(v, str) and v.startswith("0x"):
             return v
+
+    # 2) wallet object
+    wallet_obj = get(user, "wallet")
+    addr = get(wallet_obj, "address") or get(wallet_obj, "wallet_address")
+    if isinstance(addr, str) and addr.startswith("0x"):
+        return addr
+
+    # 3) wallets array
+    wallets = get(user, "wallets")
+    if isinstance(wallets, list):
+        for w in wallets:
+            addr = get(w, "address") or get(w, "wallet_address")
+            if isinstance(addr, str) and addr.startswith("0x"):
+                return addr
+
+    # 4) linked accounts
+    linked = get(user, "linked_accounts")
+    if isinstance(linked, list):
+        for acc in linked:
+            # Privy usually tags wallets like: type="wallet"
+            acc_type = (get(acc, "type") or "").lower()
+            addr = get(acc, "address") or get(acc, "wallet_address")
+            if acc_type == "wallet" and isinstance(addr, str) and addr.startswith("0x"):
+                return addr
+            # fallback: if it looks like an address, accept
+            if isinstance(addr, str) and addr.startswith("0x"):
+                return addr
+
     return ""
+
+
+def _get_user_by_did(client: PrivyAPI, did: str) -> Any:
+    """
+    The SDK shape can differ by version. We try the common patterns.
+
+    If your installed privy SDK exposes only one of these methods, the others
+    will raise AttributeError and we'll fallback.
+    """
+    users = client.users
+
+    # common: users.get(did)
+    fn = getattr(users, "get", None)
+    if callable(fn):
+        return fn(did)
+
+    # common: users.get_by_id(user_id=did)
+    fn = getattr(users, "get_by_id", None)
+    if callable(fn):
+        return fn(user_id=did)
+
+    # common: users.retrieve(user_id=did)
+    fn = getattr(users, "retrieve", None)
+    if callable(fn):
+        return fn(user_id=did)
+
+    raise RuntimeError("Privy SDK does not expose a method to fetch user by DID (users.get/get_by_id/retrieve).")
 
 
 def require_admin(
@@ -82,39 +126,27 @@ def require_admin(
         raise HTTPException(status_code=401, detail="Missing Authorization bearer token.")
 
     token = creds.credentials
-    s = get_settings()
 
     try:
-        headers = jwt.get_unverified_header(token)
-        kid = headers.get("kid")
-        if not kid:
-            raise HTTPException(status_code=401, detail="Invalid token header (missing kid).")
+        client = _privy_client()
 
-        jwks = _get_jwks()
-        jwk = _select_jwk(jwks, kid)
-        if not jwk:
-            raise HTTPException(status_code=401, detail="Unknown token key (kid not found).")
+        claims = client.users.verify_access_token(auth_token=token)
 
-        key = jwt.algorithms.ECAlgorithm.from_jwk(jwk)
+        # claims can be dict-like
+        privy_did = ""
+        if isinstance(claims, dict):
+            privy_did = str(claims.get("user_id") or "")
+        else:
+            privy_did = str(getattr(claims, "user_id", "") or "")
 
-        claims = jwt.decode(
-            token,
-            key=key,
-            algorithms=["ES256"],
-            audience=s.PRIVY_APP_ID,
-            options={"require": ["exp", "iat", "aud", "iss", "sub"]},
-        )
+        if not privy_did:
+            raise HTTPException(status_code=401, detail="Invalid token (missing user_id).")
 
-        if claims.get("iss") != "privy.io":
-            raise HTTPException(status_code=401, detail="Invalid token issuer.")
+        user = _get_user_by_did(client, privy_did)
+        wallet = _extract_wallet_from_privy_user(user).lower()
 
-        privy_did = str(claims.get("sub") or "")
-        wallet = _extract_wallet_from_claims(claims).lower()
-
-        # If wallet isn't in claims, you can enforce a different rule here.
-        # For now: require it.
         if not wallet:
-            raise HTTPException(status_code=403, detail="Token missing wallet address claim.")
+            raise HTTPException(status_code=403, detail="Token verified but user has no linked wallet address.")
 
         if wallet not in _admin_allowlist():
             raise HTTPException(status_code=403, detail="Not authorized (wallet not allowlisted).")
@@ -123,9 +155,9 @@ def require_admin(
 
     except HTTPException:
         raise
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired.")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token.")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Authentication failed.")
+    except Exception as e:
+        msg = str(e) or "Invalid token"
+        low = msg.lower()
+        if "invalid" in low or "expired" in low or "auth token" in low:
+            raise HTTPException(status_code=401, detail=msg)
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {msg}")

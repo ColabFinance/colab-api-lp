@@ -10,3 +10,4 @@ fastapi
 uvicorn[standard]
 pymongo
 PyJWT==2.10.1
+privy-client

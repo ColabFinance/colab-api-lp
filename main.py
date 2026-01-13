@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
         
-    app.include_router(admin_router)
+    app.include_router(admin_router, prefix="/api")
     app.include_router(vaults_factory_router, prefix="/api")
     app.include_router(vaults_strategy_registry_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")

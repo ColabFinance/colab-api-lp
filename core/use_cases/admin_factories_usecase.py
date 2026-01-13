@@ -3,29 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.strategy_factory_repository_mongodb import StrategyRepositoryMongoDB
 from adapters.external.database.vault_factory_repository_mongodb import VaultFactoryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.factory_entities import (
-    FactoryStatus,
-    StrategyFactoryEntity,
-    VaultFactoryEntity,
-)
+from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity, VaultFactoryEntity
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 from core.domain.repositories.vault_factory_repository_interface import VaultFactoryRepository
 from core.services.tx_service import TxService
-from adapters.chain.artifacts import load_abi_json, load_artifact, artifact_bytecode
 
 
 @dataclass
 class AdminFactoriesUseCase:
-    """
-    Admin flow:
-      - Deploy StrategyFactory/VaultFactory on-chain
-      - If mined successfully, persist address in Mongo
-      - Mark the new one ACTIVE, and archive previous ones (ARCHIVED_CAN_CREATE_NEW)
-    """
-
     txs: TxService
     strategy_repo: StrategyRepository
     vault_repo: VaultFactoryRepository
@@ -33,10 +22,23 @@ class AdminFactoriesUseCase:
     @classmethod
     def from_settings(cls) -> "AdminFactoriesUseCase":
         s = get_settings()
+        strategy_repo = StrategyRepositoryMongoDB()
+        vault_repo = VaultFactoryRepositoryMongoDB()
+
+        # Ensure indexes once
+        try:
+            strategy_repo.ensure_indexes()
+        except Exception:
+            pass
+        try:
+            vault_repo.ensure_indexes()
+        except Exception:
+            pass
+
         return cls(
             txs=TxService(s.RPC_URL_DEFAULT),
-            strategy_repo=StrategyRepositoryMongoDB(),
-            vault_repo=VaultFactoryRepositoryMongoDB(),
+            strategy_repo=strategy_repo,
+            vault_repo=vault_repo,
         )
 
     def _ensure_can_create(self, latest_status: FactoryStatus | None) -> None:
@@ -46,23 +48,21 @@ class AdminFactoriesUseCase:
             return
         raise ValueError("A factory already exists and does not allow creating a new one.")
 
-    def create_strategy_factory(self, *, gas_strategy: str = "buffered") -> dict:
+    def create_strategy_registry(
+        self,
+        *,
+        initial_owner: str,
+        gas_strategy: str = "buffered",
+    ) -> dict:
         latest = self.strategy_repo.get_latest()
         self._ensure_can_create(latest.status if latest else None)
 
-        # ABI from libs/abi
-        # TODO: adjust filename/folder to match your actual contract ABI json name.
-        abi = load_abi_json("factory", "StrategyFactory.json")
-
-        # bytecode from out artifact
-        # TODO: adjust artifact path to match your compilation output
-        art = load_artifact("StrategyFactory.sol", "StrategyFactory.json")
-        bytecode = artifact_bytecode(art)
+        abi, bytecode = load_contract_from_out("StrategyRegistry.sol", "StrategyRegistry.json")
 
         res = self.txs.deploy(
             abi=abi,
             bytecode=bytecode,
-            ctor_args=(),
+            ctor_args=(initial_owner,),
             wait=True,
             gas_strategy=gas_strategy,
         )
@@ -71,7 +71,6 @@ class AdminFactoriesUseCase:
         if not addr:
             raise RuntimeError("Deploy succeeded but contract_address is missing.")
 
-        # Persist ONLY after success
         self.strategy_repo.set_all_status(status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
         ent = StrategyFactoryEntity(
             address=str(addr),
@@ -80,7 +79,11 @@ class AdminFactoriesUseCase:
             tx_hash=res.get("tx_hash"),
         )
         self.strategy_repo.insert(ent)
-
+        
+        active = self.strategy_repo.get_active()
+        if not active or active.address.lower() != ent.address.lower():
+            raise RuntimeError("Factory deployed but failed to persist as ACTIVE in MongoDB.")
+        
         res["result"] = {
             "address": ent.address,
             "status": ent.status.value,
@@ -88,23 +91,35 @@ class AdminFactoriesUseCase:
         }
         return res
 
-    def create_vault_factory(self, *, gas_strategy: str = "buffered") -> dict:
+    def create_vault_factory(
+        self,
+        *,
+        initial_owner: str,
+        strategy_registry: str,
+        executor: str,
+        fee_collector: str = "0x0000000000000000000000000000000000000000",
+        default_cooldown_sec: int = 300,
+        default_max_slippage_bps: int = 50,
+        default_allow_swap: bool = True,
+        gas_strategy: str = "buffered",
+    ) -> dict:
         latest = self.vault_repo.get_latest()
         self._ensure_can_create(latest.status if latest else None)
 
-        # ABI from libs/abi
-        # TODO: adjust filename/folder to match your actual contract ABI json name.
-        abi = load_abi_json("factory", "VaultFactory.json")
-
-        # bytecode from out artifact
-        # TODO: adjust artifact path to match your compilation output
-        art = load_artifact("VaultFactory.sol", "VaultFactory.json")
-        bytecode = artifact_bytecode(art)
+        abi, bytecode = load_contract_from_out("VaultFactory.sol", "VaultFactory.json")
 
         res = self.txs.deploy(
             abi=abi,
             bytecode=bytecode,
-            ctor_args=(),
+            ctor_args=(
+                initial_owner,
+                strategy_registry,
+                executor,
+                fee_collector,
+                int(default_cooldown_sec),
+                int(default_max_slippage_bps),
+                bool(default_allow_swap),
+            ),
             wait=True,
             gas_strategy=gas_strategy,
         )
@@ -122,6 +137,10 @@ class AdminFactoriesUseCase:
         )
         self.vault_repo.insert(ent)
 
+        active = self.vault_repo.get_active()
+        if not active or active.address.lower() != ent.address.lower():
+            raise RuntimeError("Factory deployed but failed to persist as ACTIVE in MongoDB.")
+        
         res["result"] = {
             "address": ent.address,
             "status": ent.status.value,
