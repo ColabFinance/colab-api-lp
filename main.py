@@ -6,12 +6,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from adapters.external.database.vault_events_repository import VaultEventsRepository
-from adapters.external.database.vault_registry_repository import VaultRegistryRepository
+from adapters.external.database.vault_events_repository_mongodb import VaultEventsRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
-from adapters.entry.http.view.vaults_factory import router as vaults_factory_router
-from adapters.entry.http.view.vaults_strategy_registry import router as vaults_strategy_registry_router
-from adapters.entry.http.view.vaults_client_vault import router as vaults_client_vault_router
+from adapters.entry.http.view.client_vault_view import router as vaults_client_vault_router
 from adapters.entry.http.view.admin.admin_view import router as admin_router
 
 def init_mongo_indexes() -> None:
@@ -21,8 +18,6 @@ def init_mongo_indexes() -> None:
     This makes sure the application has the expected indexes for efficient
     queries and unique constraints before serving any request.
     """
-    # Vault registry: __init__ already ensures its own indexes
-    VaultRegistryRepository()
 
     # Vault state indexes
     state_repo = VaultStateRepository()
@@ -68,8 +63,6 @@ def create_app() -> FastAPI:
     )
         
     app.include_router(admin_router, prefix="/api")
-    app.include_router(vaults_factory_router, prefix="/api")
-    app.include_router(vaults_strategy_registry_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")
 
     return app
