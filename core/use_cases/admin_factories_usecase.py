@@ -51,10 +51,15 @@ class AdminFactoriesUseCase:
     def create_strategy_registry(
         self,
         *,
+        chain: str,
         initial_owner: str,
         gas_strategy: str = "buffered",
     ) -> dict:
-        latest = self.strategy_repo.get_latest()
+        chain = (chain or "").strip().lower()
+        if not chain:
+            raise ValueError("chain is required")
+        
+        latest = self.strategy_repo.get_latest(chain=chain)
         self._ensure_can_create(latest.status if latest else None)
 
         abi, bytecode = load_contract_from_out("StrategyRegistry.sol", "StrategyRegistry.json")
@@ -71,8 +76,9 @@ class AdminFactoriesUseCase:
         if not addr:
             raise RuntimeError("Deploy succeeded but contract_address is missing.")
 
-        self.strategy_repo.set_all_status(status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
+        self.strategy_repo.set_all_status(chain=chain, status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
         ent = StrategyFactoryEntity(
+            chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
             created_at=datetime.now(UTC),
@@ -80,11 +86,12 @@ class AdminFactoriesUseCase:
         )
         self.strategy_repo.insert(ent)
         
-        active = self.strategy_repo.get_active()
+        active = self.strategy_repo.get_active(chain=chain)
         if not active or active.address.lower() != ent.address.lower():
             raise RuntimeError("Factory deployed but failed to persist as ACTIVE in MongoDB.")
         
         res["result"] = {
+            "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
             "created_at": ent.created_at.isoformat(),
@@ -94,6 +101,7 @@ class AdminFactoriesUseCase:
     def create_vault_factory(
         self,
         *,
+        chain: str,
         initial_owner: str,
         strategy_registry: str,
         executor: str,
@@ -103,7 +111,11 @@ class AdminFactoriesUseCase:
         default_allow_swap: bool = True,
         gas_strategy: str = "buffered",
     ) -> dict:
-        latest = self.vault_repo.get_latest()
+        chain = (chain or "").strip().lower()
+        if not chain:
+            raise ValueError("chain is required")
+        
+        latest = self.vault_repo.get_latest(chain=chain)
         self._ensure_can_create(latest.status if latest else None)
 
         abi, bytecode = load_contract_from_out("VaultFactory.sol", "VaultFactory.json")
@@ -128,8 +140,9 @@ class AdminFactoriesUseCase:
         if not addr:
             raise RuntimeError("Deploy succeeded but contract_address is missing.")
 
-        self.vault_repo.set_all_status(status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
+        self.vault_repo.set_all_status(chain=chain, status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
         ent = VaultFactoryEntity(
+            chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
             created_at=datetime.now(UTC),
@@ -137,11 +150,12 @@ class AdminFactoriesUseCase:
         )
         self.vault_repo.insert(ent)
 
-        active = self.vault_repo.get_active()
+        active = self.vault_repo.get_active(chain=chain)
         if not active or active.address.lower() != ent.address.lower():
             raise RuntimeError("Factory deployed but failed to persist as ACTIVE in MongoDB.")
         
         res["result"] = {
+            "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
             "created_at": ent.created_at.isoformat(),

@@ -8,11 +8,11 @@ from core.domain.entities.factory_entities import StrategyFactoryEntity, Factory
 
 class StrategyRepository(ABC):
     @abstractmethod
-    def get_latest(self) -> Optional[StrategyFactoryEntity]:
+    def get_latest(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_active(self) -> Optional[StrategyFactoryEntity]:
+    def get_active(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
         raise NotImplementedError
 
     @abstractmethod
@@ -20,9 +20,9 @@ class StrategyRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set_all_status(self, *, status: FactoryStatus) -> int:
+    def set_all_status(self, *, chain: str, status: FactoryStatus) -> int:
         raise NotImplementedError
 
     @abstractmethod
-    def list_all(self, *, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
+    def list_all(self, *, chain: str, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
         raise NotImplementedError

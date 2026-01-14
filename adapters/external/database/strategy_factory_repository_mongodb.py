@@ -18,13 +18,6 @@ class StrategyRepositoryMongoDB(StrategyRepository):
     Repository for StrategyRegistry (on-chain) factory records.
 
     Collection: strategy_factories
-    Document shape:
-    {
-      "address": "0x..",
-      "status": "ACTIVE" | "ARCHIVED_CAN_CREATE_NEW",
-      "created_at": ISO string,
-      "tx_hash": "0x.." | null
-    }
     """
 
     COLLECTION_NAME = "strategy_factories"
@@ -38,33 +31,30 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         return self._collection
 
     def ensure_indexes(self) -> None:
-        self._collection.create_index(
-            [("status", 1)],
-            name="ix_strategy_factories_status",
-        )
-        self._collection.create_index(
-            [("created_at", -1)],
-            name="ix_strategy_factories_created_at_desc",
-        )
+        self._collection.create_index([("chain", 1)], name="ix_strategy_factories_chain")
+        self._collection.create_index([("status", 1)], name="ix_strategy_factories_status")
+        self._collection.create_index([("created_at", -1)], name="ix_strategy_factories_created_at_desc")
 
     def _to_entity(self, doc: dict) -> StrategyFactoryEntity:
         return StrategyFactoryEntity(
+            chain=str(doc.get("chain") or "").strip(),
             address=str(doc["address"]),
             status=FactoryStatus(str(doc["status"])),
             created_at=datetime.fromisoformat(doc["created_at"]),
             tx_hash=doc.get("tx_hash"),
         )
 
-    def get_latest(self) -> Optional[StrategyFactoryEntity]:
-        doc = self._collection.find_one(sort=[("created_at", -1)])
+    def get_latest(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
+        doc = self._collection.find_one({"chain": chain}, sort=[("created_at", -1)])
         return self._to_entity(doc) if doc else None
 
-    def get_active(self) -> Optional[StrategyFactoryEntity]:
-        doc = self._collection.find_one({"status": FactoryStatus.ACTIVE.value})
+    def get_active(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
+        doc = self._collection.find_one({"chain": chain, "status": FactoryStatus.ACTIVE.value})
         return self._to_entity(doc) if doc else None
 
     def insert(self, entity: StrategyFactoryEntity) -> None:
         doc = {
+            "chain": entity.chain,
             "address": entity.address,
             "status": entity.status.value,
             "created_at": entity.created_at.isoformat(),
@@ -73,14 +63,10 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         doc = sanitize_for_mongo(doc)
         self._collection.insert_one(doc)
 
-    def set_all_status(self, *, status: FactoryStatus) -> int:
-        res = self._collection.update_many({}, {"$set": {"status": status.value}})
+    def set_all_status(self, *, chain: str, status: FactoryStatus) -> int:
+        res = self._collection.update_many({"chain": chain}, {"$set": {"status": status.value}})
         return int(res.modified_count)
 
-    def list_all(self, *, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
-        cursor = (
-            self._collection
-            .find({}, sort=[("created_at", -1)])
-            .limit(int(limit))
-        )
+    def list_all(self, *, chain: str, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
+        cursor = self._collection.find({"chain": chain}, sort=[("created_at", -1)]).limit(int(limit))
         return [self._to_entity(d) for d in cursor]

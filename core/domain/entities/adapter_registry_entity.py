@@ -21,6 +21,8 @@ class AdapterRegistryEntity:
     """
     Mongo document (collection: adapter_registry)
 
+     - chain: Chain which the adapter was created (e.g. Base, Bnb, ...)
+    
     On-chain deployment:
       - address: deployed adapter contract address (result of tx deploy)
 
@@ -40,7 +42,8 @@ class AdapterRegistryEntity:
       - addresses must be normalized (checksum or lower) consistently.
       - uniqueness is enforced at DB-level via a unique compound index.
     """
-
+    chain: str
+    
     # On-chain deployed contract address
     address: str
 

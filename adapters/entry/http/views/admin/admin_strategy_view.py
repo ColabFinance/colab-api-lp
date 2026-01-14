@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from adapters.entry.http.view.admin.admin_auth import require_admin, AdminPrincipal
+from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
 from adapters.entry.http.dtos.admin_factory_dtos import (
     CreateStrategyRegistryRequest
 )
@@ -23,6 +23,7 @@ async def create_strategy_factory(
     try:
         initial_owner = (body.initial_owner or admin.wallet_address or "").strip()
         return use_case.create_strategy_registry(
+            chain=body.chain,
             initial_owner=initial_owner,
             gas_strategy=body.gas_strategy,
         )

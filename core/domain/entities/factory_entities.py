@@ -20,6 +20,7 @@ class FactoryStatus(StrEnum):
 
 @dataclass(frozen=True)
 class StrategyFactoryEntity:
+    chain: str
     address: str
     status: FactoryStatus
     created_at: datetime
@@ -28,6 +29,7 @@ class StrategyFactoryEntity:
 
 @dataclass(frozen=True)
 class VaultFactoryEntity:
+    chain: str
     address: str
     status: FactoryStatus
     created_at: datetime

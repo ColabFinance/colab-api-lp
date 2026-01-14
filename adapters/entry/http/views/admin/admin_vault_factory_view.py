@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from adapters.entry.http.view.admin.admin_auth import require_admin, AdminPrincipal
+from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
 from adapters.entry.http.dtos.admin_factory_dtos import (
     CreateVaultFactoryRequest,
 )
@@ -23,7 +23,8 @@ async def create_vault_factory(
     try:
         initial_owner = (body.initial_owner or admin.wallet_address or "").strip()
         return use_case.create_vault_factory(
-            initial_owner=initial_owner,
+            chain=body.chain,
+            initial_owner=body.initial_owner,
             strategy_registry=body.strategy_registry,
             executor=body.executor,
             fee_collector=body.fee_collector,

@@ -16,27 +16,6 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
     """
     Collection: adapter_registry
 
-    Document shape:
-    {
-      "address": "0x..",  # deployed adapter contract address
-      "tx_hash": "0x.." | null,
-
-      "dex": "pancake_v3",
-
-      "pool": "0x..",
-      "nfpm": "0x..",
-      "gauge": "0x..",  # may be zero
-
-      "token0": "0x..",
-      "token1": "0x..",
-      "pool_name": "WETH/USDC",
-      "fee_bps": "300",
-      "status": "ACTIVE",
-
-      "created_at": ISO string,
-      "created_by": "0x.." | null
-    }
-
     Uniqueness:
       - (dex, pool) unique: one adapter record per pool per dex.
       - address unique: avoid duplicates if the same deployment is inserted twice.
@@ -55,20 +34,22 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
 
     def ensure_indexes(self) -> None:
         self._collection.create_index(
-            [("dex", 1), ("pool", 1)],
+            [("chain", 1), ("dex", 1), ("pool", 1)],
             unique=True,
-            name="ux_adapter_registry_dex_pool",
+            name="ux_adapter_registry_chain_dex_pool",
         )
         self._collection.create_index(
             [("address", 1)],
             unique=True,
             name="ux_adapter_registry_address",
         )
+        self._collection.create_index([("chain", 1)], name="ix_adapter_registry_chain")
         self._collection.create_index([("status", 1)], name="ix_adapter_registry_status")
         self._collection.create_index([("created_at", -1)], name="ix_adapter_registry_created_at_desc")
 
     def _to_entity(self, doc: dict) -> AdapterRegistryEntity:
         return AdapterRegistryEntity(
+            chain=str(doc.get("chain") or "").strip(),
             address=str(doc["address"]),
             dex=str(doc["dex"]),
             pool=str(doc["pool"]),
@@ -84,8 +65,8 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
             created_by=doc.get("created_by"),
         )
 
-    def get_by_dex_pool(self, *, dex: str, pool: str) -> Optional[AdapterRegistryEntity]:
-        doc = self._collection.find_one({"dex": dex, "pool": pool})
+    def get_by_dex_pool(self, *, chain: str, dex: str, pool: str) -> Optional[AdapterRegistryEntity]:
+        doc = self._collection.find_one({"chain": chain, "dex": dex, "pool": pool})
         return self._to_entity(doc) if doc else None
 
     def get_by_address(self, *, address: str) -> Optional[AdapterRegistryEntity]:
@@ -94,6 +75,7 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
 
     def insert(self, entity: AdapterRegistryEntity) -> None:
         doc = {
+            "chain": entity.chain,
             "address": entity.address,
             "tx_hash": entity.tx_hash,
             "dex": entity.dex,
@@ -111,6 +93,17 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
         doc = sanitize_for_mongo(doc)
         self._collection.insert_one(doc)
 
-    def list_all(self, *, limit: int = 100) -> Sequence[AdapterRegistryEntity]:
-        cur = self._collection.find({}, sort=[("created_at", -1)]).limit(int(limit))
+    def list_all(self, *, chain: str | None = None, limit: int = 100) -> Sequence[AdapterRegistryEntity]:
+        q = {}
+        if chain:
+            q["chain"] = chain
+        cur = self._collection.find(q, sort=[("created_at", -1)]).limit(int(limit))
+        return [self._to_entity(d) for d in cur]
+
+    def list_active(self, *, chain: str, limit: int = 200) -> Sequence[AdapterRegistryEntity]:
+        cur = (
+            self._collection
+            .find({"chain": chain, "status": AdapterStatus.ACTIVE.value}, sort=[("created_at", -1)])
+            .limit(int(limit))
+        )
         return [self._to_entity(d) for d in cur]
