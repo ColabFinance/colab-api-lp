@@ -10,6 +10,7 @@ from adapters.external.database.vault_events_repository_mongodb import VaultEven
 from adapters.external.database.vault_state_repository import VaultStateRepository
 from adapters.entry.http.views.client_vault_view import router as vaults_client_vault_router
 from adapters.entry.http.views.admin.admin_view import router as admin_router
+from adapters.entry.http.views.contracts_address_view import router as contracts_router
 
 def init_mongo_indexes() -> None:
     """
@@ -64,7 +65,8 @@ def create_app() -> FastAPI:
         
     app.include_router(admin_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")
-
+    app.include_router(contracts_router)
+    
     return app
 
 

@@ -23,7 +23,8 @@ async def create_vault_factory(
     try:
         initial_owner = (body.initial_owner or admin.wallet_address or "").strip()
         return use_case.create_vault_factory(
-            initial_owner=initial_owner,
+            chain=body.chain,
+            initial_owner=body.initial_owner,
             strategy_registry=body.strategy_registry,
             executor=body.executor,
             fee_collector=body.fee_collector,

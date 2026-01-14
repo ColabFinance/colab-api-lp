@@ -23,6 +23,7 @@ async def create_strategy_factory(
     try:
         initial_owner = (body.initial_owner or admin.wallet_address or "").strip()
         return use_case.create_strategy_registry(
+            chain=body.chain,
             initial_owner=initial_owner,
             gas_strategy=body.gas_strategy,
         )

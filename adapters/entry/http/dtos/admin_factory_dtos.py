@@ -9,6 +9,7 @@ GasStrategy = Literal["default", "buffered", "aggressive"]
 
 class CreateStrategyRegistryRequest(BaseModel):
     gas_strategy: GasStrategy = Field(default="buffered")
+    chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
     initial_owner: str = Field(...)
 
     @field_validator("initial_owner")
@@ -21,7 +22,7 @@ class CreateStrategyRegistryRequest(BaseModel):
 
 class CreateVaultFactoryRequest(BaseModel):
     gas_strategy: GasStrategy = Field(default="buffered")
-
+    chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
     initial_owner: str
     strategy_registry: str
     executor: str
@@ -41,6 +42,7 @@ class CreateVaultFactoryRequest(BaseModel):
 
 
 class FactoryRecordOut(BaseModel):
+    chain: str
     address: str
     status: str
     created_at: str

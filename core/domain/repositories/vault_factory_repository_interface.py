@@ -8,11 +8,11 @@ from core.domain.entities.factory_entities import VaultFactoryEntity, FactorySta
 
 class VaultFactoryRepository(ABC):
     @abstractmethod
-    def get_latest(self) -> Optional[VaultFactoryEntity]:
+    def get_latest(self, *, chain: str) -> Optional[VaultFactoryEntity]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_active(self) -> Optional[VaultFactoryEntity]:
+    def get_active(self, *, chain: str) -> Optional[VaultFactoryEntity]:
         raise NotImplementedError
 
     @abstractmethod
@@ -20,9 +20,9 @@ class VaultFactoryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set_all_status(self, *, status: FactoryStatus) -> int:
+    def set_all_status(self, *, chain: str, status: FactoryStatus) -> int:
         raise NotImplementedError
 
     @abstractmethod
-    def list_all(self, *, limit: int = 50) -> Sequence[VaultFactoryEntity]:
+    def list_all(self, *, chain: str, limit: int = 50) -> Sequence[VaultFactoryEntity]:
         raise NotImplementedError

@@ -12,7 +12,7 @@ class AdapterRegistryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_by_dex_pool(self, *, dex: str, pool: str) -> Optional[AdapterRegistryEntity]:
+    def get_by_dex_pool(self, *, chain: str, dex: str, pool: str) -> Optional[AdapterRegistryEntity]:
         raise NotImplementedError
 
     @abstractmethod
@@ -24,5 +24,9 @@ class AdapterRegistryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def list_all(self, *, limit: int = 100) -> Sequence[AdapterRegistryEntity]:
+    def list_all(self, *, chain: str, limit: int = 100) -> Sequence[AdapterRegistryEntity]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_active(self, *, chain: str, limit: int = 50) -> Sequence[AdapterRegistryEntity]:
         raise NotImplementedError

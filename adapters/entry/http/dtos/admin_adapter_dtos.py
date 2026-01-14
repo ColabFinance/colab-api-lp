@@ -20,6 +20,8 @@ class CreateAdapterRequest(BaseModel):
     """
     gas_strategy: GasStrategy = Field(default="buffered")
 
+    chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
+    
     dex: str = Field(..., description='DEX id (e.g. "pancake_v3")')
 
     # Contract constructor params (required)
@@ -54,6 +56,8 @@ class CreateAdapterRequest(BaseModel):
 
 
 class AdapterRecordOut(BaseModel):
+    chain: str
+    
     address: str
     tx_hash: str | None = None
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
 from adapters.entry.http.dtos.admin_adapter_dtos import CreateAdapterRequest
@@ -31,6 +31,7 @@ async def create_adapter(
     try:
         created_by = (admin.wallet_address or "").strip() or None
         return use_case.create_adapter(
+            chain=body.chain,
             dex=body.dex,
             pool=body.pool,
             nfpm=body.nfpm,
@@ -56,10 +57,11 @@ async def create_adapter(
 
 @router.get("/adapters")
 async def list_adapters(
+    chain: str = Query(default=None, description='Chain filter (e.g. "base", "bnb")'),
     _: AdminPrincipal = Depends(require_admin),
     use_case: AdminAdaptersUseCase = Depends(get_use_case),
 ):
     try:
-        return {"ok": True, "message": "ok", "data": use_case.list_adapters(limit=200)}
+        return {"ok": True, "message": "ok", "data": use_case.list_adapters(chain=chain, limit=200)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to list adapters: {exc}") from exc

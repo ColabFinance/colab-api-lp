@@ -71,6 +71,7 @@ class AdminAdaptersUseCase:
     def create_adapter(
         self,
         *,
+        chain: str,
         dex: str,
         pool: str,
         nfpm: str,
@@ -83,13 +84,17 @@ class AdminAdaptersUseCase:
         created_by: str | None = None,
         gas_strategy: str = "buffered",
     ) -> dict:
+        chain = (chain or "").strip().lower()
+        if not chain:
+            raise ValueError("chain is required")
+        
         dex = (dex or "").strip()
         if not dex:
             raise ValueError("dex is required")
 
         # Uniqueness by (dex, pool)
         pool_l = _norm_lower(pool)
-        existing = self.repo.get_by_dex_pool(dex=dex, pool=pool_l)
+        existing = self.repo.get_by_dex_pool(chain=chain, dex=dex, pool=pool_l)
         if existing:
             raise ValueError("Adapter already exists for this dex+pool.")
 
@@ -130,6 +135,7 @@ class AdminAdaptersUseCase:
             raise RuntimeError("Deploy succeeded but contract_address is missing.")
 
         ent = AdapterRegistryEntity(
+            chain=chain,
             address=str(addr),
             tx_hash=res.get("tx_hash"),
             dex=dex,
@@ -153,6 +159,7 @@ class AdminAdaptersUseCase:
 
         # Normalize API output like factories
         res["result"] = {
+            "chain": ent.chain,
             "address": ent.address,
             "tx_hash": ent.tx_hash,
             "dex": ent.dex,
@@ -169,11 +176,16 @@ class AdminAdaptersUseCase:
         }
         return res
 
-    def list_adapters(self, *, limit: int = 200) -> list[dict]:
+    def list_adapters(self, *, chain: str, limit: int = 200) -> list[dict]:
+        chain = (chain or "").strip().lower()
+        if not chain:
+            raise ValueError("chain is required")
+        
         out: list[dict] = []
-        for e in self.repo.list_all(limit=int(limit)):
+        for e in self.repo.list_all(chain=chain, limit=int(limit)):
             out.append(
                 {
+                    "chain": e.chain,
                     "address": e.address,
                     "tx_hash": e.tx_hash,
                     "dex": e.dex,
