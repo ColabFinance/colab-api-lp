@@ -65,7 +65,7 @@ def create_app() -> FastAPI:
         
     app.include_router(admin_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")
-    app.include_router(contracts_router)
+    app.include_router(contracts_router, prefix="/api")
     
     return app
 
