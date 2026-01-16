@@ -27,12 +27,12 @@ def _is_address_like(s: str) -> bool:
 def _norm_owner_prefix(owner: str) -> str:
     s = (owner or "").strip()
     if s.startswith("0x") and len(s) >= 7:
-        return s[2:7].lower()
-    return (s[:5] or "owner").lower()
+        return s[0:7]
+    return (s[:7] or "owner")
 
 
 def _norm_slug(s: str) -> str:
-    return (s or "").strip().lower().replace(" ", "")
+    return (s or "").strip().lower().replace(" ", "").replace("/","-")
 
 
 @dataclass
@@ -284,7 +284,12 @@ class VaultClientVaultUseCase:
     def _resolve_vault_address(self, alias_or_address: str) -> str:
         if _is_address_like(alias_or_address):
             return Web3.to_checksum_address(alias_or_address)
-        raise ValueError("Unknown vault alias (send the vault address in the path)")
+        else:
+            vault = self.vault_registry_repo.find_by_alias(alias_or_address)
+            if vault:
+                alias_or_address = vault.config.address
+                return Web3.to_checksum_address(alias_or_address)
+        raise ValueError("Unknown vault alias/address (send the vault address in the path)")
 
     # -------- reads --------
 
