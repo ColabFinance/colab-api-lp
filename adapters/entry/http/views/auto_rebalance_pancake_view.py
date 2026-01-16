@@ -1,53 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from adapters.entry.http.dtos.vault_status_dtos import (
-    VaultStatusOut,
-)
-from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, TxRunResponse
+from adapters.entry.http.dtos.auto_rebalance_pancake_dtos import AutoRebalancePancakeRequest
+from adapters.entry.http.dtos.vaults_client_vault_dtos import TxRunResponse
 from core.services.exceptions import TransactionRevertedError
-from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
+from core.use_cases.auto_rebalance_pancake_usecase import AutoRebalancePancakeUseCase
 
-router = APIRouter(prefix="/vaults", tags=["vaults-client-vault"])
-
-
-def get_use_case() -> VaultClientVaultUseCase:
-    return VaultClientVaultUseCase.from_settings()
+router = APIRouter(prefix="/vaults/pancake", tags=["vaults-auto-rebalance-pancake"])
 
 
-@router.get(
-    "/{alias_or_address}/status",
-    response_model=VaultStatusOut,
-    summary="Read-only full status for a given vault (accepts address in {alias_or_address})",
-)
-async def get_status(alias_or_address: str, use_case: VaultClientVaultUseCase = Depends(get_use_case)):
-    try:
-        res = use_case.get_status(alias_or_address=alias_or_address)
-        return VaultStatusOut(**res)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to get vault status: {exc}") from exc
+def get_use_case() -> AutoRebalancePancakeUseCase:
+    return AutoRebalancePancakeUseCase.from_settings()
 
 
 @router.post(
-    "/create-client-vault",
+    "/{alias}/auto-rebalance-pancake",
     response_model=TxRunResponse,
-    summary="Create ClientVault on-chain and register in Mongo vault_registry",
+    summary="Execute ClientVault.autoRebalancePancake(params) for a Pancake vault alias",
 )
-async def create_client_vault(
-    body: CreateClientVaultRequest,
-    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+async def auto_rebalance_pancake(
+    alias: str,
+    body: AutoRebalancePancakeRequest,
+    use_case: AutoRebalancePancakeUseCase = Depends(get_use_case),
 ):
     try:
-        out = use_case.create_client_vault_and_register(
-            strategy_id=body.strategy_id,
-            owner=body.owner,
-            chain=body.chain,
-            dex=body.dex,
-            par_token=body.par_token,
-            name=body.name,
-            description=body.description,
-            config_in=body.config.model_dump(mode="python"),
+        out = use_case.auto_rebalance_pancake(
+            alias=alias,
+            new_lower=body.new_lower,
+            new_upper=body.new_upper,
+            lower_price=body.lower_price,
+            upper_price=body.upper_price,
+            fee=body.fee,
+            token_in=body.token_in,
+            token_out=body.token_out,
+            swap_amount_in=body.swap_amount_in,
+            swap_amount_out_min=body.swap_amount_out_min,
+            sqrt_price_limit_x96=body.sqrt_price_limit_x96,
             gas_strategy=body.gas_strategy,
         )
 
@@ -71,7 +58,7 @@ async def create_client_vault(
             ts=(str(tx.get("ts")) if tx.get("ts") is not None else None),
             vault_address=out.get("vault_address"),
             alias=out.get("alias"),
-            mongo_id=out.get("mongo_id"),
+            mongo_id=None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -87,4 +74,4 @@ async def create_client_vault(
             },
         ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to createClientVault: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Failed to autoRebalancePancake: {exc}") from exc

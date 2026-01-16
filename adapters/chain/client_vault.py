@@ -25,7 +25,6 @@ ABI_CLIENT_VAULT = [
     {"name": "exitPositionToVault", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "exitPositionAndWithdrawAll", "inputs": [{"type": "address", "name": "to"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
 
-    # ---- owner tx (missing in front)
     {"name": "openInitialPosition", "inputs": [{"type": "int24", "name": "lowerTick"}, {"type": "int24", "name": "upperTick"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "rebalanceWithCaps", "inputs": [{"type": "int24", "name": "lowerTick"}, {"type": "int24", "name": "upperTick"}, {"type": "uint256", "name": "cap0"}, {"type": "uint256", "name": "cap1"}], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"name": "stake", "inputs": [], "outputs": [], "stateMutability": "nonpayable", "type": "function"},
@@ -40,13 +39,13 @@ ABI_CLIENT_VAULT = [
         {"type": "uint160", "name": "sqrtPriceLimitX96"},
     ], "outputs": [{"type": "uint256", "name": "amountOut"}], "stateMutability": "nonpayable", "type": "function"},
 
-    # ---- NEW executor tx
+    # ---- executor tx (MUST match the solidity struct field names)
     {"name": "autoRebalancePancake", "inputs": [{
-        "name": "p",
+        "name": "params",
         "type": "tuple",
         "components": [
-            {"type": "int24", "name": "newLowerTick"},
-            {"type": "int24", "name": "newUpperTick"},
+            {"type": "int24", "name": "newLower"},
+            {"type": "int24", "name": "newUpper"},
             {"type": "uint24", "name": "fee"},
             {"type": "address", "name": "tokenIn"},
             {"type": "address", "name": "tokenOut"},
@@ -59,6 +58,13 @@ ABI_CLIENT_VAULT = [
 
 
 class ClientVaultAdapter:
+    """
+    Thin Web3 adapter for ClientVault.sol.
+
+    This class is meant to be the single source of truth for vault-level calls.
+    DEX-specific adapters (pancake/uniswap/aerodrome) should not re-declare vault ABI.
+    """
+
     def __init__(self, w3: Web3, address: str):
         if not address:
             raise RuntimeError("ClientVaultAdapter: address not configured")
@@ -94,68 +100,30 @@ class ClientVaultAdapter:
 
     def tokens(self) -> Tuple[str, str]:
         t0, t1 = self.contract.functions.tokens().call()
-        return (t0, t1)
+        return (Web3.to_checksum_address(t0), Web3.to_checksum_address(t1))
 
-    # ---------------- fn builders (for TxService.send) ----------------
+    # ---------------- tx builders ----------------
 
-    def fn_set_automation_enabled(self, enabled: bool) -> ContractFunction:
-        return self.contract.functions.setAutomationEnabled(bool(enabled))
-
-    def fn_set_automation_config(self, cooldown_sec: int, max_slippage_bps: int, allow_swap: bool) -> ContractFunction:
-        return self.contract.functions.setAutomationConfig(int(cooldown_sec), int(max_slippage_bps), bool(allow_swap))
-
-    def fn_collect(self) -> ContractFunction:
-        return self.contract.functions.collectToVault()
-
-    def fn_exit_to_vault(self) -> ContractFunction:
-        return self.contract.functions.exitPositionToVault()
-
-    def fn_exit_withdraw_all(self, to_addr: str) -> ContractFunction:
-        return self.contract.functions.exitPositionAndWithdrawAll(Web3.to_checksum_address(to_addr))
-
-    # ---- new owner tx builders
-    def fn_open_initial_position(self, lower_tick: int, upper_tick: int) -> ContractFunction:
-        return self.contract.functions.openInitialPosition(int(lower_tick), int(upper_tick))
-
-    def fn_rebalance_with_caps(self, lower_tick: int, upper_tick: int, cap0: int, cap1: int) -> ContractFunction:
-        return self.contract.functions.rebalanceWithCaps(int(lower_tick), int(upper_tick), int(cap0), int(cap1))
-
-    def fn_stake(self) -> ContractFunction:
-        return self.contract.functions.stake()
-
-    def fn_unstake(self) -> ContractFunction:
-        return self.contract.functions.unstake()
-
-    def fn_claim_rewards(self) -> ContractFunction:
-        return self.contract.functions.claimRewards()
-
-    def fn_swap_exact_in_pancake(
+    def fn_auto_rebalance_pancake(
         self,
+        *,
+        new_lower: int,
+        new_upper: int,
+        fee: int,
         token_in: str,
         token_out: str,
-        fee: int,
-        amount_in: int,
-        amount_out_min: int,
-        sqrt_price_limit_x96: int,
+        swap_amount_in: int,
+        swap_amount_out_min: int,
+        sqrt_price_limit_x96: int = 0,
     ) -> ContractFunction:
-        return self.contract.functions.swapExactInPancake(
-            Web3.to_checksum_address(token_in),
-            Web3.to_checksum_address(token_out),
-            int(fee),
-            int(amount_in),
-            int(amount_out_min),
-            int(sqrt_price_limit_x96),
-        )
-
-    # ---- executor tx builder
-    def fn_auto_rebalance_pancake(self, p: dict) -> ContractFunction:
-        return self.contract.functions.autoRebalancePancake((
-            int(p["newLowerTick"]),
-            int(p["newUpperTick"]),
-            int(p["fee"]),
-            Web3.to_checksum_address(p["tokenIn"]),
-            Web3.to_checksum_address(p["tokenOut"]),
-            int(p["swapAmountIn"]),
-            int(p["swapAmountOutMin"]),
-            int(p["sqrtPriceLimitX96"]),
-        ))
+        params = {
+            "newLower": int(new_lower),
+            "newUpper": int(new_upper),
+            "fee": int(fee),
+            "tokenIn": Web3.to_checksum_address(token_in),
+            "tokenOut": Web3.to_checksum_address(token_out),
+            "swapAmountIn": int(swap_amount_in),
+            "swapAmountOutMin": int(swap_amount_out_min),
+            "sqrtPriceLimitX96": int(sqrt_price_limit_x96 or 0),
+        }
+        return self.contract.functions.autoRebalancePancake(params)
