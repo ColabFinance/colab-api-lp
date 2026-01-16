@@ -8,6 +8,13 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 ABI_VAULT_FACTORY = [
+    {
+        "name": "owner",
+        "inputs": [],
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
     # createClientVault
     {
         "name": "createClientVault",
@@ -86,6 +93,18 @@ ABI_VAULT_FACTORY = [
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function",
+    },
+    
+    {
+        "anonymous": False,
+        "name": "ClientVaultDeployed",
+        "type": "event",
+        "inputs": [
+            {"indexed": True, "internalType": "address", "name": "vault", "type": "address"},
+            {"indexed": True, "internalType": "address", "name": "owner", "type": "address"},
+            {"indexed": True, "internalType": "uint256", "name": "strategyId", "type": "uint256"},
+            {"indexed": False, "internalType": "uint256", "name": "vaultIndex", "type": "uint256"}
+        ]
     },
 ]
 

@@ -104,7 +104,7 @@ def get_settings() -> Settings:
 
         # Core chain
         PRIVATE_KEY=os.getenv("PRIVATE_KEY", ""),
-        RPC_URL_DEFAULT=os.getenv("RPC_SEPOLIA", ""),  # keep as-is, but name suggests you may rename later
+        RPC_URL_DEFAULT=os.getenv("RPC_URL_DEFAULT", ""),  # keep as-is, but name suggests you may rename later
         STABLE_TOKEN_ADDRESSES=stable_list,
 
         # Mongo

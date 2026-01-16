@@ -9,7 +9,8 @@ ABI_STRATEGY_REGISTRY = [
     {
         "name": "getStrategy",
         "inputs": [
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"}
+            {"internalType": "address", "name": "owner", "type": "address"},
+            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
         ],
         "outputs": [
             {
@@ -30,55 +31,52 @@ ABI_STRATEGY_REGISTRY = [
         "stateMutability": "view",
         "type": "function",
     },
-
     {
         "name": "isStrategyActive",
-        "inputs": [{"internalType": "uint256", "name": "strategyId", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "address", "name": "owner", "type": "address"},
+            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
+        ],
         "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
         "stateMutability": "view",
         "type": "function",
     },
-
+    # OPTIONAL: for listing
     {
-        "name": "registerStrategy",
-        "inputs": [
-            {"internalType": "address", "name": "adapter", "type": "address"},
-            {"internalType": "address", "name": "dexRouter", "type": "address"},
-            {"internalType": "address", "name": "token0", "type": "address"},
-            {"internalType": "address", "name": "token1", "type": "address"},
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "string", "name": "description", "type": "string"},
+        "name": "getAllStrategiesByOwner",
+        "inputs": [{"internalType": "address", "name": "owner", "type": "address"}],
+        "outputs": [
+            {
+                "internalType": "struct StrategyRegistry.Strategy[]",
+                "name": "all",
+                "type": "tuple[]",
+                "components": [
+                    {"internalType": "address", "name": "adapter", "type": "address"},
+                    {"internalType": "address", "name": "dexRouter", "type": "address"},
+                    {"internalType": "address", "name": "token0", "type": "address"},
+                    {"internalType": "address", "name": "token1", "type": "address"},
+                    {"internalType": "string", "name": "name", "type": "string"},
+                    {"internalType": "string", "name": "description", "type": "string"},
+                    {"internalType": "bool", "name": "active", "type": "bool"},
+                ],
+            }
         ],
-        "outputs": [{"internalType": "uint256", "name": "strategyId", "type": "uint256"}],
-        "stateMutability": "nonpayable",
+        "stateMutability": "view",
         "type": "function",
     },
-
     {
-        "name": "updateStrategy",
+        "anonymous": False,
+        "name": "StrategyRegistered",
+        "type": "event",
         "inputs": [
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
-            {"internalType": "address", "name": "adapter", "type": "address"},
-            {"internalType": "address", "name": "dexRouter", "type": "address"},
-            {"internalType": "address", "name": "token0", "type": "address"},
-            {"internalType": "address", "name": "token1", "type": "address"},
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "string", "name": "description", "type": "string"},
+            {"indexed": True, "internalType": "address", "name": "owner", "type": "address"},
+            {"indexed": True, "internalType": "uint256", "name": "strategyId", "type": "uint256"},
+            {"indexed": True, "internalType": "address", "name": "adapter", "type": "address"},
+            {"indexed": False, "internalType": "address", "name": "dexRouter", "type": "address"},
+            {"indexed": False, "internalType": "address", "name": "token0", "type": "address"},
+            {"indexed": False, "internalType": "address", "name": "token1", "type": "address"},
+            {"indexed": False, "internalType": "string", "name": "name", "type": "string"},
         ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-
-    {
-        "name": "setStrategyActive",
-        "inputs": [
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
-            {"internalType": "bool", "name": "active", "type": "bool"},
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
     },
 ]
 
@@ -107,10 +105,11 @@ class StrategyRegistryAdapter:
     # Views
     # ------------------------------------------------------------------ #
 
-    def get_strategy(self, strategy_id: int) -> Dict[str, Any]:
+    def get_strategy(self, *, owner: str, strategy_id: int) -> Dict[str, Any]:
+        owner = Web3.to_checksum_address((owner or "").strip())
         try:
             adapter, dex_router, token0, token1, name, description, active = (
-                self.contract.functions.getStrategy(int(strategy_id)).call()
+                self.contract.functions.getStrategy(owner, int(strategy_id)).call()
             )
         except ContractLogicError as exc:
             raise exc
@@ -125,11 +124,10 @@ class StrategyRegistryAdapter:
             "active": bool(active),
         }
 
-    def is_strategy_active(self, strategy_id: int) -> bool:
+    def is_strategy_active(self, *, owner: str, strategy_id: int) -> bool:
+        owner = Web3.to_checksum_address((owner or "").strip())
         try:
-            return bool(
-                self.contract.functions.isStrategyActive(int(strategy_id)).call()
-            )
+            return bool(self.contract.functions.isStrategyActive(owner, int(strategy_id)).call())
         except ContractLogicError:
             return False
 
