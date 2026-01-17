@@ -29,6 +29,7 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
     def ensure_indexes(self) -> None:
         # alias must be unique
         self._col.create_index([("alias", 1)], unique=True, name="ux_alias")
+        self._col.create_index([("address", 1)], unique=True, name="ux_address")
 
         # helpful search indexes
         self._col.create_index([("chain", 1), ("dex", 1), ("owner", 1)], name="ix_chain_dex_owner")
@@ -53,6 +54,10 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
 
     def find_by_alias(self, alias: str) -> Optional[VaultRegistryEntity]:
         doc = self._col.find_one({"alias": alias})
+        return VaultRegistryEntity.from_mongo(doc)
+    
+    def find_by_address(self, address: str) -> Optional[VaultRegistryEntity]:
+        doc = self._col.find_one({"address": address})
         return VaultRegistryEntity.from_mongo(doc)
 
     def count_alias_prefix(self, *, chain: str, dex: str, owner_prefix: str, par_token: str) -> int:

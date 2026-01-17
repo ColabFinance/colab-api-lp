@@ -90,6 +90,7 @@ class VaultRegistryEntity(MongoEntity):
 
     dex: str
     alias: str
+    address: str
     config: VaultConfig
 
     is_active: bool = False

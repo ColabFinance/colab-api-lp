@@ -190,6 +190,7 @@ class VaultClientVaultUseCase:
 
         entity = VaultRegistryEntity(
             dex=dex,
+            address=vault_addr,
             alias=alias,
             config=cfg,
             is_active=False,
@@ -295,5 +296,19 @@ class VaultClientVaultUseCase:
 
     def get_status(self, *, alias_or_address: str) -> Dict[str, Any]:
         vault_addr = self._resolve_vault_address(alias_or_address)
-        return self.status_svc.compute(vault_addr)
+
+        reg = None
+        if _is_address_like(alias_or_address):
+            reg = self.vault_registry_repo.find_by_address(Web3.to_checksum_address(alias_or_address))
+        else:
+            reg = self.vault_registry_repo.find_by_alias(alias_or_address)
+
+        dex = (reg.dex if reg else "")
+        swap_pools = (reg.config.swap_pools if (reg and reg.config and reg.config.swap_pools) else {})
+
+        return self.status_svc.compute(
+            vault_address=vault_addr,
+            dex=dex,
+            swap_pools=swap_pools,
+        )
 
