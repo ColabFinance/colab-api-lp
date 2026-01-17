@@ -20,6 +20,10 @@ class VaultRegistryRepositoryInterface(ABC):
     @abstractmethod
     def find_by_alias(self, alias: str) -> Optional[VaultRegistryEntity]:
         raise NotImplementedError
+    
+    @abstractmethod
+    def find_by_address(self, address: str) -> Optional[VaultRegistryEntity]:
+        raise NotImplementedError
 
     @abstractmethod
     def count_alias_prefix(self, *, chain: str, dex: str, owner_prefix: str, par_token: str) -> int:

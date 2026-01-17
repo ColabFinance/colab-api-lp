@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class TokenMetaOut(BaseModel):
@@ -30,10 +30,31 @@ class HoldingsOut(BaseModel):
     in_position: HoldingsSideOut
     totals: HoldingsSideOut
 
+    # extra fields required by api-signals
+    symbols: Dict[str, str]          # {"token0": "WETH", "token1": "USDC"}
+    addresses: Dict[str, str]        # {"token0": "0x..", "token1": "0x.."}
+
 
 class FeesUncollectedOut(BaseModel):
     token0: float
     token1: float
+    usd: Optional[float] = None      # convenient aggregation for api-signals
+
+
+class GaugeRewardsOut(BaseModel):
+    reward_token: str
+    reward_symbol: str
+    pending_raw: int
+    pending_amount: float
+    pending_usd_est: Optional[float] = None
+
+
+class GaugeRewardBalancesOut(BaseModel):
+    token: str
+    symbol: str
+    decimals: int
+    in_vault_raw: int
+    in_vault: float
 
 
 class VaultStatusOut(BaseModel):
@@ -81,3 +102,11 @@ class VaultStatusOut(BaseModel):
 
     # vault state
     last_rebalance_ts: int
+
+    # extra for api-signals
+    has_gauge: bool
+    staked: bool
+    position_location: Literal["none", "pool", "gauge"]
+
+    gauge_rewards: GaugeRewardsOut
+    gauge_reward_balances: GaugeRewardBalancesOut

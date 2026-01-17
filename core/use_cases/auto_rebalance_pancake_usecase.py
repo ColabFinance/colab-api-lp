@@ -44,7 +44,7 @@ def _price_to_tick(p_t1_t0: float, dec0: int, dec1: int) -> int:
     if p_t1_t0 <= 0:
         raise ValueError("price must be > 0")
 
-    p_raw = float(p_t1_t0) * (10 ** (dec1 - dec0))  # <-- FIX HERE
+    p_raw = float(p_t1_t0) * (10 ** (dec1 - dec0))
     return int(math.floor(math.log(p_raw) / math.log(1.0001)))
 
 
