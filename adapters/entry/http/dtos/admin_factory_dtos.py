@@ -28,7 +28,7 @@ class CreateVaultFactoryRequest(BaseModel):
     executor: str
     fee_collector: str = Field(default="0x0000000000000000000000000000000000000000")
 
-    default_cooldown_sec: int = Field(default=300, ge=0)
+    default_cooldown_sec: int = Field(default=1, ge=0)
     default_max_slippage_bps: int = Field(default=50, ge=0, le=10_000)
     default_allow_swap: bool = Field(default=True)
 
