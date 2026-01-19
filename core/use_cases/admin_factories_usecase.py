@@ -82,7 +82,6 @@ class AdminFactoriesUseCase:
             chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
-            created_at=datetime.now(UTC),
             tx_hash=res.get("tx_hash"),
         )
         self.strategy_repo.insert(ent)
@@ -95,7 +94,7 @@ class AdminFactoriesUseCase:
             "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
         }
         return res
 
@@ -146,7 +145,6 @@ class AdminFactoriesUseCase:
             chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
-            created_at=datetime.now(UTC),
             tx_hash=res.get("tx_hash"),
         )
         self.vault_repo.insert(ent)
@@ -159,6 +157,6 @@ class AdminFactoriesUseCase:
             "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
         }
         return res

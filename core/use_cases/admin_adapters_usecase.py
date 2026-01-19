@@ -148,7 +148,6 @@ class AdminAdaptersUseCase:
             pool_name=pool_name,
             fee_bps=fee_bps,
             status=AdapterStatus(st),
-            created_at=datetime.now(UTC),
             created_by=_norm_lower(created_by) if created_by else None,
         )
 
@@ -172,7 +171,7 @@ class AdminAdaptersUseCase:
             "pool_name": ent.pool_name,
             "fee_bps": ent.fee_bps,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
             "created_by": ent.created_by,
         }
         return res
@@ -198,7 +197,7 @@ class AdminAdaptersUseCase:
                     "pool_name": e.pool_name,
                     "fee_bps": e.fee_bps,
                     "status": e.status.value,
-                    "created_at": e.created_at.isoformat(),
+                    "created_at": e.created_at_iso,
                     "created_by": e.created_by,
                 }
             )

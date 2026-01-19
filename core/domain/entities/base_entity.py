@@ -77,3 +77,25 @@ class MongoEntity(BaseModel):
             data["_id"] = data.pop("id")
 
         return data
+
+    def touch_for_insert(self: E) -> E:
+        now_ms = self.now_ms()
+        now_iso = self.now_iso()
+
+        if self.created_at is None:
+            self.created_at = now_ms
+        if self.created_at_iso is None:
+            self.created_at_iso = now_iso
+
+        self.updated_at = now_ms
+        self.updated_at_iso = now_iso
+        return self
+
+
+    def touch_for_update(self: E) -> E:
+        now_ms = self.now_ms()
+        now_iso = self.now_iso()
+
+        self.updated_at = now_ms
+        self.updated_at_iso = now_iso
+        return self

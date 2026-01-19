@@ -36,19 +36,6 @@ class VaultFactoryRepositoryMongoDB(VaultFactoryRepository):
         self._collection.create_index([("created_at", -1)], name="ix_vault_factories_created_at_desc")
         self._collection.create_index([("address", 1)], unique=True, name="ux_vault_factories_address")
 
-    def _touch_for_insert(self, entity: VaultFactoryEntity) -> VaultFactoryEntity:
-        now_ms = entity.now_ms()
-        now_iso = entity.now_iso()
-
-        if entity.created_at is None:
-            entity.created_at = now_ms
-        if entity.created_at_iso is None:
-            entity.created_at_iso = now_iso
-
-        entity.updated_at = now_ms
-        entity.updated_at_iso = now_iso
-        return entity
-
     def get_latest(self, *, chain: str) -> Optional[VaultFactoryEntity]:
         doc = self._collection.find_one({"chain": chain}, sort=[("created_at", -1)])
         return VaultFactoryEntity.from_mongo(doc)
@@ -58,7 +45,7 @@ class VaultFactoryRepositoryMongoDB(VaultFactoryRepository):
         return VaultFactoryEntity.from_mongo(doc)
 
     def insert(self, entity: VaultFactoryEntity) -> None:
-        entity = self._touch_for_insert(entity)
+        entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
         self._collection.insert_one(doc)
 
