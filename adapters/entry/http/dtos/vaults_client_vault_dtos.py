@@ -1,5 +1,10 @@
+from __future__ import annotations
+
 from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
+
+from core.domain.schemas.vault_inputs import VaultCreateConfigIn
 
 
 class TxGasBlock(BaseModel):
@@ -30,26 +35,63 @@ class TxRunResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     ts: Optional[str] = None
 
-    # extra fields for vault creation
     vault_address: Optional[str] = None
     alias: Optional[str] = None
     mongo_id: Optional[str] = None
 
+    @classmethod
+    def from_tx_any(
+        cls,
+        *,
+        tx_any: Any,
+        vault_address: Optional[str] = None,
+        alias: Optional[str] = None,
+        mongo_id: Optional[str] = None,
+    ) -> "TxRunResponse":
+        """
+        Normalize TxService output shapes:
+        - dict (preferred)
+        - str tx_hash (legacy)
+        - None/unknown -> safe default
+        """
+        if isinstance(tx_any, dict):
+            tx = tx_any
+        elif isinstance(tx_any, str) and tx_any.startswith("0x"):
+            tx = {
+                "tx_hash": tx_any,
+                "broadcasted": True,
+                "status": None,
+                "receipt": None,
+                "gas": {},
+                "budget": {},
+                "result": {},
+                "ts": None,
+            }
+        else:
+            tx = {
+                "tx_hash": "",
+                "broadcasted": False,
+                "status": None,
+                "receipt": None,
+                "gas": {},
+                "budget": {},
+                "result": {},
+                "ts": None,
+            }
 
-class SwapPoolRefIn(BaseModel):
-    dex: str
-    pool: str
-
-
-class VaultConfigIn(BaseModel):
-    adapter: str
-    pool: str
-    nfpm: str
-    gauge: Optional[str] = None
-
-    rpc_url: str
-    version: str
-    swap_pools: Dict[str, SwapPoolRefIn] = Field(default_factory=dict)
+        return cls(
+            tx_hash=str(tx.get("tx_hash") or ""),
+            broadcasted=bool(tx.get("broadcasted", True)),
+            receipt=(tx.get("receipt") if isinstance(tx.get("receipt"), dict) else tx.get("receipt")),
+            status=(tx.get("status") if isinstance(tx.get("status"), int) else None),
+            gas=(TxGasBlock.model_validate(tx.get("gas") or {}) if isinstance(tx.get("gas"), dict) else None),
+            budget=(TxBudgetBlock.model_validate(tx.get("budget") or {}) if isinstance(tx.get("budget"), dict) else None),
+            result=(tx.get("result") if isinstance(tx.get("result"), dict) else None),
+            ts=(str(tx.get("ts")) if tx.get("ts") is not None else None),
+            vault_address=vault_address,
+            alias=alias,
+            mongo_id=mongo_id,
+        )
 
 
 class CreateClientVaultRequest(BaseModel):
@@ -65,4 +107,4 @@ class CreateClientVaultRequest(BaseModel):
     name: str = Field(..., description="Human friendly name (user-provided)")
     description: Optional[str] = Field(default=None, description="Human friendly description")
 
-    config: VaultConfigIn = Field(..., description="Off-chain config that must be persisted under config")
+    config: VaultCreateConfigIn = Field(..., description="Vault config persisted under `config`")

@@ -1,7 +1,10 @@
 from typing import Tuple
+
 from web3 import Web3
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
+
+from core.domain.schemas.onchain_types import AutoRebalancePancakeParams
 
 
 ABI_CLIENT_VAULT = [
@@ -39,7 +42,7 @@ ABI_CLIENT_VAULT = [
         {"type": "uint160", "name": "sqrtPriceLimitX96"},
     ], "outputs": [{"type": "uint256", "name": "amountOut"}], "stateMutability": "nonpayable", "type": "function"},
 
-    # ---- executor tx (MUST match the solidity struct field names)
+    # ---- executor tx
     {"name": "autoRebalancePancake", "inputs": [{
         "name": "params",
         "type": "tuple",
@@ -104,26 +107,8 @@ class ClientVaultAdapter:
 
     # ---------------- tx builders ----------------
 
-    def fn_auto_rebalance_pancake(
-        self,
-        *,
-        new_lower: int,
-        new_upper: int,
-        fee: int,
-        token_in: str,
-        token_out: str,
-        swap_amount_in: int,
-        swap_amount_out_min: int,
-        sqrt_price_limit_x96: int = 0,
-    ) -> ContractFunction:
-        params = {
-            "newLower": int(new_lower),
-            "newUpper": int(new_upper),
-            "fee": int(fee),
-            "tokenIn": Web3.to_checksum_address(token_in),
-            "tokenOut": Web3.to_checksum_address(token_out),
-            "swapAmountIn": int(swap_amount_in),
-            "swapAmountOutMin": int(swap_amount_out_min),
-            "sqrtPriceLimitX96": int(sqrt_price_limit_x96 or 0),
-        }
-        return self.contract.functions.autoRebalancePancake(params)
+    def fn_auto_rebalance_pancake(self, params: AutoRebalancePancakeParams) -> ContractFunction:
+        p = params.to_abi_dict()
+        p["tokenIn"] = Web3.to_checksum_address(p["tokenIn"])
+        p["tokenOut"] = Web3.to_checksum_address(p["tokenOut"])
+        return self.contract.functions.autoRebalancePancake(p)

@@ -38,28 +38,13 @@ async def auto_rebalance_pancake(
             gas_strategy=body.gas_strategy,
         )
 
-        tx_any = out.get("tx")
-
-        if isinstance(tx_any, str):
-            tx = {"tx_hash": tx_any, "broadcasted": True, "status": None, "receipt": None, "gas": {}, "budget": {}}
-        elif isinstance(tx_any, dict):
-            tx = tx_any
-        else:
-            tx = {"tx_hash": "", "broadcasted": False, "status": None, "receipt": None, "gas": {}, "budget": {}}
-
-        return TxRunResponse(
-            tx_hash=str(tx.get("tx_hash") or ""),
-            broadcasted=bool(tx.get("broadcasted", True)),
-            receipt=(tx.get("receipt") if isinstance(tx.get("receipt"), dict) else tx.get("receipt")),
-            status=(tx.get("status") if isinstance(tx.get("status"), int) else None),
-            gas=(tx.get("gas") if isinstance(tx.get("gas"), dict) else {}),
-            budget=(tx.get("budget") if isinstance(tx.get("budget"), dict) else {}),
-            result=(tx.get("result") if isinstance(tx.get("result"), dict) else None),
-            ts=(str(tx.get("ts")) if tx.get("ts") is not None else None),
+        return TxRunResponse.from_tx_any(
+            tx_any=out.get("tx"),
             vault_address=out.get("vault_address"),
             alias=out.get("alias"),
             mongo_id=None,
         )
+
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TransactionRevertedError as exc:

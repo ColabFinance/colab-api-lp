@@ -4,6 +4,8 @@ from web3 import Web3
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
 
+from core.domain.schemas.onchain_types import VaultFactoryConfig
+
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
@@ -131,20 +133,14 @@ class VaultFactoryAdapter:
     # Views
     # ------------------------------------------------------------------ #
 
-    def get_config(self) -> Dict[str, Any]:
-        return {
-            "executor": self.contract.functions.executor().call(),
-            "feeCollector": self.contract.functions.feeCollector().call(),
-            "defaultCooldownSec": int(
-                self.contract.functions.defaultCooldownSec().call()
-            ),
-            "defaultMaxSlippageBps": int(
-                self.contract.functions.defaultMaxSlippageBps().call()
-            ),
-            "defaultAllowSwap": bool(
-                self.contract.functions.defaultAllowSwap().call()
-            ),
-        }
+    def get_config(self) -> VaultFactoryConfig:
+        return VaultFactoryConfig(
+            executor=self.contract.functions.executor().call(),
+            fee_collector=self.contract.functions.feeCollector().call(),
+            default_cooldown_sec=int(self.contract.functions.defaultCooldownSec().call()),
+            default_max_slippage_bps=int(self.contract.functions.defaultMaxSlippageBps().call()),
+            default_allow_swap=bool(self.contract.functions.defaultAllowSwap().call()),
+        )
 
     # ---------------- fn builders (for TxService.send) ----------------
 
