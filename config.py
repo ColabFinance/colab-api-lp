@@ -49,7 +49,7 @@ class Settings:
     STRATEGY_REGISTRY_ADDRESS: str
     VAULT_FACTORY_ADDRESS: str
 
-    # ---- Admin / Privy Auth (NEW) ----
+    # ---- Admin / Privy Auth ----
     PRIVY_APP_ID: str
     PRIVY_APP_SECRET: str
     PRIVY_JWKS_URL: str
@@ -59,11 +59,6 @@ class Settings:
     DATA_ROOT: str = "data"
     UNISWAP_ROOT: str = "uniswap"
     AERODROME_ROOT: str = "aerodrome"
-
-    # default TWAP/policies
-    TWAP_WINDOW_SEC: int = 60
-    MAX_TWAP_DEVIATION_TICKS: int = 50
-    MIN_REBALANCE_COOLDOWN_SEC: int = 1800
 
     # generic
     ENV: str = Field(default="dev")
@@ -115,7 +110,7 @@ def get_settings() -> Settings:
         STRATEGY_REGISTRY_ADDRESS=os.getenv("STRATEGY_REGISTRY_ADDRESS", ""),
         VAULT_FACTORY_ADDRESS=os.getenv("VAULT_FACTORY_ADDRESS", ""),
 
-        # Admin / Privy Auth (NEW)
+        # Admin / Privy Auth
         PRIVY_APP_ID=os.getenv("PRIVY_APP_ID", ""),
         PRIVY_JWKS_URL=os.getenv("PRIVY_JWKS_URL", "https://auth.privy.io/api/v1/apps/jwks"),
         ADMIN_WALLETS=os.getenv("ADMIN_WALLETS", ""),

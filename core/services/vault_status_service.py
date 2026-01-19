@@ -146,25 +146,39 @@ def _get_sqrt_ratio_at_tick(tick: int) -> int:
 
 
 def _get_amounts_for_liquidity(sqrtP: int, sqrtA: int, sqrtB: int, L: int) -> Tuple[int, int]:
+    """
+    Uniswap v3 math with Q64.96 sqrt prices.
+    Returns raw token amounts (uint256-like integers).
+    """
     sp = Decimal(sqrtP)
     sa = Decimal(sqrtA)
     sb = Decimal(sqrtB)
     liq = Decimal(L)
+    q96 = Q96  # Decimal(2) ** 96
 
     if sa > sb:
         sa, sb = sb, sa
 
+    if liq <= 0:
+        return 0, 0
+
     if sp <= sa:
-        amount0 = liq * (sb - sa) / (sa * sb)
+        # amount0 = L * (sb - sa) / (sa * sb) * Q96
+        amount0 = liq * (sb - sa) * q96 / (sa * sb)
         return int(amount0), 0
 
     if sp < sb:
-        amount0 = liq * (sb - sp) / (sp * sb)
-        amount1 = liq * (sp - sa)
+        # amount0 = L * (sb - sp) / (sp * sb) * Q96
+        amount0 = liq * (sb - sp) * q96 / (sp * sb)
+        # amount1 = L * (sp - sa) / Q96
+        amount1 = liq * (sp - sa) / q96
         return int(amount0), int(amount1)
 
-    amount1 = liq * (sb - sa)
+    # sp >= sb
+    # amount1 = L * (sb - sa) / Q96
+    amount1 = liq * (sb - sa) / q96
     return 0, int(amount1)
+
 
 
 @dataclass
