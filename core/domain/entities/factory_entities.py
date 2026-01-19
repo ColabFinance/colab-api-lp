@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
 from enum import StrEnum
 from typing import Optional
+
+from pydantic import ConfigDict
+
+from .base_entity import MongoEntity
 
 
 class FactoryStatus(StrEnum):
@@ -14,23 +16,34 @@ class FactoryStatus(StrEnum):
     - ACTIVE: this factory is currently used by the system.
     - ARCHIVED_CAN_CREATE_NEW: creation is allowed if the latest factory is in this status.
     """
+
     ACTIVE = "ACTIVE"
     ARCHIVED_CAN_CREATE_NEW = "ARCHIVED_CAN_CREATE_NEW"
 
 
-@dataclass(frozen=True)
-class StrategyFactoryEntity:
+class StrategyFactoryEntity(MongoEntity):
+    """
+    Mongo document (collection: strategy_factories).
+    Represents an on-chain StrategyRegistry factory record.
+    """
+
     chain: str
     address: str
     status: FactoryStatus
-    created_at: datetime
     tx_hash: Optional[str] = None
 
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
 
-@dataclass(frozen=True)
-class VaultFactoryEntity:
+
+class VaultFactoryEntity(MongoEntity):
+    """
+    Mongo document (collection: vault_factories).
+    Represents an on-chain VaultFactory record.
+    """
+
     chain: str
     address: str
     status: FactoryStatus
-    created_at: datetime
     tx_hash: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
