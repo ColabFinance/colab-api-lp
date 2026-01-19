@@ -3,12 +3,11 @@ from typing import Literal, Optional
 
 from web3 import Web3
 
-
-GasStrategy = Literal["default", "buffered", "aggressive"]
+from core.domain.enums.tx_enums import GasStrategy
 
 
 class CreateStrategyRegistryRequest(BaseModel):
-    gas_strategy: GasStrategy = Field(default="buffered")
+    gas_strategy: GasStrategy = Field(default=GasStrategy.BUFFERED)
     chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
     initial_owner: str = Field(...)
 
@@ -21,7 +20,7 @@ class CreateStrategyRegistryRequest(BaseModel):
         return Web3.to_checksum_address(v)
 
 class CreateVaultFactoryRequest(BaseModel):
-    gas_strategy: GasStrategy = Field(default="buffered")
+    gas_strategy: GasStrategy = Field(default=GasStrategy.BUFFERED)
     chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
     initial_owner: str
     strategy_registry: str

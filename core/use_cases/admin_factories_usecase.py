@@ -7,7 +7,8 @@ from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.strategy_factory_repository_mongodb import StrategyRepositoryMongoDB
 from adapters.external.database.vault_factory_repository_mongodb import VaultFactoryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity, VaultFactoryEntity
+from core.domain.entities.factory_entities import StrategyFactoryEntity, VaultFactoryEntity
+from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 from core.domain.repositories.vault_factory_repository_interface import VaultFactoryRepository
 from core.services.tx_service import TxService
@@ -81,7 +82,6 @@ class AdminFactoriesUseCase:
             chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
-            created_at=datetime.now(UTC),
             tx_hash=res.get("tx_hash"),
         )
         self.strategy_repo.insert(ent)
@@ -94,7 +94,7 @@ class AdminFactoriesUseCase:
             "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
         }
         return res
 
@@ -145,7 +145,6 @@ class AdminFactoriesUseCase:
             chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
-            created_at=datetime.now(UTC),
             tx_hash=res.get("tx_hash"),
         )
         self.vault_repo.insert(ent)
@@ -158,6 +157,6 @@ class AdminFactoriesUseCase:
             "chain": ent.chain,
             "address": ent.address,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
         }
         return res

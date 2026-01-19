@@ -4,20 +4,9 @@ from enum import Enum
 
 from pydantic import ConfigDict
 
+from core.domain.enums.adapter_enums import AdapterStatus
+
 from .base_entity import MongoEntity
-
-
-class AdapterStatus(str, Enum):
-    """
-    Adapter record status stored in MongoDB.
-
-    ACTIVE: can be selected/used by services that resolve adapters.
-    INACTIVE: kept for history but should not be used by default.
-    """
-
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
-
 
 class AdapterRegistryEntity(MongoEntity):
     """

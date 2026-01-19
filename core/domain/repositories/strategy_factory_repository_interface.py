@@ -3,7 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence
 
-from core.domain.entities.factory_entities import StrategyFactoryEntity, FactoryStatus
+from core.domain.entities.factory_entities import StrategyFactoryEntity
+from core.domain.enums.factory_enums import FactoryStatus
 
 
 class StrategyRepository(ABC):

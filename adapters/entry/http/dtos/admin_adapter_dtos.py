@@ -5,8 +5,7 @@ from typing import Literal
 
 from web3 import Web3
 
-
-GasStrategy = Literal["default", "buffered", "aggressive"]
+from core.domain.enums.tx_enums import GasStrategy
 
 
 class CreateAdapterRequest(BaseModel):
@@ -18,7 +17,7 @@ class CreateAdapterRequest(BaseModel):
       - The deployed contract address is derived from the transaction receipt,
         and persisted as `address` in MongoDB.
     """
-    gas_strategy: GasStrategy = Field(default="buffered")
+    gas_strategy: GasStrategy = Field(default=GasStrategy.BUFFERED)
 
     chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
     

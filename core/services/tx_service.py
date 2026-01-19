@@ -10,11 +10,9 @@ from web3 import Web3
 from web3.contract.contract import ContractFunction
 
 from config import get_settings
+from core.domain.enums.tx_enums import GasStrategy
 from core.services.utils import to_json_safe
 from core.services.exceptions import TransactionBudgetExceededError, TransactionRevertedError
-
-GasStrategy = Literal["default", "buffered", "aggressive"]
-
 
 @dataclass
 class _BudgetBlock:
@@ -197,7 +195,7 @@ class TxService:
         wait: bool = False,
         value: int = 0,
         gas_limit: Optional[int] = None,
-        gas_strategy: GasStrategy = "buffered",
+        gas_strategy: GasStrategy = GasStrategy.BUFFERED,
         max_gas_usd: Optional[float] = None,
         eth_usd_hint: Optional[float] = None,
     ) -> dict:
@@ -305,7 +303,7 @@ class TxService:
         ctor_args: Sequence[Any] = (),
         wait: bool = True,
         gas_limit: Optional[int] = None,
-        gas_strategy: GasStrategy = "buffered",
+        gas_strategy: GasStrategy = GasStrategy.BUFFERED,
         value: int = 0,
         max_gas_usd: Optional[float] = None,
         eth_usd_hint: Optional[float] = None,

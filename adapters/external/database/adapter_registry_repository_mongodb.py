@@ -7,7 +7,8 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity, AdapterStatus
+from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity
+from core.domain.enums.adapter_enums import AdapterStatus
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
 
 
@@ -42,19 +43,6 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
         self._collection.create_index([("status", 1)], name="ix_adapter_registry_status")
         self._collection.create_index([("created_at", -1)], name="ix_adapter_registry_created_at_desc")
 
-    def _touch_for_insert(self, entity: AdapterRegistryEntity) -> AdapterRegistryEntity:
-        now_ms = entity.now_ms()
-        now_iso = entity.now_iso()
-
-        if entity.created_at is None:
-            entity.created_at = now_ms
-        if entity.created_at_iso is None:
-            entity.created_at_iso = now_iso
-
-        entity.updated_at = now_ms
-        entity.updated_at_iso = now_iso
-        return entity
-
     def get_by_dex_pool(self, *, chain: str, dex: str, pool: str) -> Optional[AdapterRegistryEntity]:
         doc = self._collection.find_one({"chain": chain, "dex": dex, "pool": pool})
         return AdapterRegistryEntity.from_mongo(doc)
@@ -64,7 +52,7 @@ class AdapterRegistryRepositoryMongoDB(AdapterRegistryRepository):
         return AdapterRegistryEntity.from_mongo(doc)
 
     def insert(self, entity: AdapterRegistryEntity) -> None:
-        entity = self._touch_for_insert(entity)
+        entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
         self._collection.insert_one(doc)
 

@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity, AdapterStatus
+from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity
+from core.domain.enums.adapter_enums import AdapterStatus
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
 from core.services.tx_service import TxService
 
@@ -147,7 +148,6 @@ class AdminAdaptersUseCase:
             pool_name=pool_name,
             fee_bps=fee_bps,
             status=AdapterStatus(st),
-            created_at=datetime.now(UTC),
             created_by=_norm_lower(created_by) if created_by else None,
         )
 
@@ -171,7 +171,7 @@ class AdminAdaptersUseCase:
             "pool_name": ent.pool_name,
             "fee_bps": ent.fee_bps,
             "status": ent.status.value,
-            "created_at": ent.created_at.isoformat(),
+            "created_at": ent.created_at_iso,
             "created_by": ent.created_by,
         }
         return res
@@ -197,7 +197,7 @@ class AdminAdaptersUseCase:
                     "pool_name": e.pool_name,
                     "fee_bps": e.fee_bps,
                     "status": e.status.value,
-                    "created_at": e.created_at.isoformat(),
+                    "created_at": e.created_at_iso,
                     "created_by": e.created_by,
                 }
             )

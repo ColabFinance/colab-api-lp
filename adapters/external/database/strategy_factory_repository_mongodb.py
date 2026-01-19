@@ -7,7 +7,8 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity
+from core.domain.entities.factory_entities import StrategyFactoryEntity
+from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 
 
@@ -35,19 +36,6 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         self._collection.create_index([("created_at", -1)], name="ix_strategy_factories_created_at_desc")
         self._collection.create_index([("address", 1)], unique=True, name="ux_strategy_factories_address")
 
-    def _touch_for_insert(self, entity: StrategyFactoryEntity) -> StrategyFactoryEntity:
-        now_ms = entity.now_ms()
-        now_iso = entity.now_iso()
-
-        if entity.created_at is None:
-            entity.created_at = now_ms
-        if entity.created_at_iso is None:
-            entity.created_at_iso = now_iso
-
-        entity.updated_at = now_ms
-        entity.updated_at_iso = now_iso
-        return entity
-
     def get_latest(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
         doc = self._collection.find_one({"chain": chain}, sort=[("created_at", -1)])
         return StrategyFactoryEntity.from_mongo(doc)
@@ -57,7 +45,7 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         return StrategyFactoryEntity.from_mongo(doc)
 
     def insert(self, entity: StrategyFactoryEntity) -> None:
-        entity = self._touch_for_insert(entity)
+        entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
         self._collection.insert_one(doc)
 
