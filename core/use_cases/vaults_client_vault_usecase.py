@@ -16,6 +16,7 @@ from config import get_settings
 from adapters.chain.client_vault import ClientVaultAdapter
 from core.domain.entities.vault_client_registry_entity import SwapPoolRef, VaultConfig, VaultOnchainInfo, VaultRegistryEntity
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
+from core.domain.schemas.vault_inputs import VaultCreateConfigIn
 from core.services.tx_service import TxService
 from core.services.utils import to_json_safe
 from core.services.vault_status_service import VaultStatusService
@@ -115,7 +116,7 @@ class VaultClientVaultUseCase:
         par_token: str,
         name: str,
         description: Optional[str],
-        config_in: Dict[str, Any],
+        config_in: VaultCreateConfigIn,
         gas_strategy: str = "buffered",
     ) -> Dict[str, Any]:
         if not _is_address_like(owner):
@@ -177,15 +178,13 @@ class VaultClientVaultUseCase:
         # 5) build entity with old structure + new fields
         cfg = VaultConfig(
             address=vault_addr,
-            adapter=str(config_in.get("adapter", "")).strip(),
-            pool=str(config_in.get("pool", "")).strip(),
-            nfpm=str(config_in.get("nfpm", "")).strip(),
-            gauge=(str(config_in.get("gauge")).strip() if config_in.get("gauge") else None),
-            rpc_url=str(config_in.get("rpc_url", "")).strip(),
-            version=str(config_in.get("version", "")).strip(),
-            swap_pools={
-                k: SwapPoolRef.model_validate(v) for k, v in (config_in.get("swap_pools") or {}).items()
-            },
+            adapter=str(config_in.adapter or "").strip(),
+            pool=str(config_in.pool or "").strip(),
+            nfpm=str(config_in.nfpm or "").strip(),
+            gauge=(str(config_in.gauge).strip() if config_in.gauge else None),
+            rpc_url=str(config_in.rpc_url or "").strip(),
+            version=str(config_in.version or "").strip(),
+            swap_pools=config_in.swap_pools or {},
         )
 
         entity = VaultRegistryEntity(

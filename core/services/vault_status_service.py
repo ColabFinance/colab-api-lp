@@ -11,6 +11,17 @@ from config import get_settings
 from adapters.chain.client_vault import ClientVaultAdapter
 from adapters.chain.cl_adapter import CLAdapter
 from core.domain.entities.vault_client_registry_entity import SwapPoolRef
+from core.domain.schemas.onchain_types import (
+    Erc20Meta,
+    FeesUncollectedOut,
+    GaugeRewardBalancesOut,
+    GaugeRewardsOut,
+    HoldingsBlock,
+    HoldingsOut,
+    PriceBlock,
+    PricesOut,
+    VaultStatusOut,
+)
 
 getcontext().prec = 90
 Q96 = Decimal(2) ** 96
@@ -489,56 +500,62 @@ class VaultStatusService:
                 # keep safe-zero blocks
                 pass
 
-        return {
-            "vault": Web3.to_checksum_address(vault_address),
+        out = VaultStatusOut(
+            vault=Web3.to_checksum_address(vault_address),
 
-            "owner": owner,
-            "executor": executor,
-            "adapter": Web3.to_checksum_address(adapter_addr),
-            "dex_router": Web3.to_checksum_address(dex_router),
-            "fee_collector": Web3.to_checksum_address(fee_collector),
-            "strategy_id": int(strategy_id),
+            owner=owner,
+            executor=executor,
+            adapter=Web3.to_checksum_address(adapter_addr),
+            dex_router=Web3.to_checksum_address(dex_router),
+            fee_collector=Web3.to_checksum_address(fee_collector),
+            strategy_id=int(strategy_id),
 
-            "pool": Web3.to_checksum_address(pool),
-            "nfpm": Web3.to_checksum_address(nfpm_addr),
-            "gauge": Web3.to_checksum_address(gauge) if has_gauge else ZERO_ADDR,
+            pool=Web3.to_checksum_address(pool),
+            nfpm=Web3.to_checksum_address(nfpm_addr),
+            gauge=Web3.to_checksum_address(gauge) if has_gauge else ZERO_ADDR,
 
-            "token0": {"address": token0_addr, "symbol": sym0, "decimals": dec0},
-            "token1": {"address": token1_addr, "symbol": sym1, "decimals": dec1},
+            token0=Erc20Meta(address=token0_addr, symbol=str(sym0), decimals=int(dec0)),
+            token1=Erc20Meta(address=token1_addr, symbol=str(sym1), decimals=int(dec1)),
 
-            "position_token_id": int(token_id),
-            "liquidity": int(liquidity),
-            "lower_tick": int(lower_tick),
-            "upper_tick": int(upper_tick),
-            "tick_spacing": int(tick_spacing),
+            position_token_id=int(token_id),
+            liquidity=int(liquidity),
+            lower_tick=int(lower_tick),
+            upper_tick=int(upper_tick),
+            tick_spacing=int(tick_spacing),
 
-            "tick": int(tick),
-            "sqrt_price_x96": int(sqrt_price_x96),
-            "prices": {"current": current_block, "lower": lower_block, "upper": upper_block},
+            tick=int(tick),
+            sqrt_price_x96=int(sqrt_price_x96),
+            prices=PricesOut(
+                current=PriceBlock(**current_block),
+                lower=PriceBlock(**lower_block),
+                upper=PriceBlock(**upper_block),
+            ),
 
-            "out_of_range": bool(out_of_range),
-            "range_side": range_side,
+            out_of_range=bool(out_of_range),
+            range_side=str(range_side),
 
-            "holdings": {
-                "vault_idle": {"token0": vault_idle0, "token1": vault_idle1},
-                "in_position": {"token0": inpos0, "token1": inpos1},
-                "totals": {"token0": totals0, "token1": totals1},
-                "symbols": {"token0": str(sym0), "token1": str(sym1)},
-                "addresses": {"token0": token0_addr, "token1": token1_addr},
-            },
+            holdings=HoldingsOut(
+                vault_idle=HoldingsBlock(token0=float(vault_idle0), token1=float(vault_idle1)),
+                in_position=HoldingsBlock(token0=float(inpos0), token1=float(inpos1)),
+                totals=HoldingsBlock(token0=float(totals0), token1=float(totals1)),
+                symbols={"token0": str(sym0), "token1": str(sym1)},
+                addresses={"token0": token0_addr, "token1": token1_addr},
+            ),
 
-            "fees_uncollected": {
-                "token0": float(fees0_h),
-                "token1": float(fees1_h),
-                "usd": fees_usd,
-            },
+            fees_uncollected=FeesUncollectedOut(
+                token0=float(fees0_h),
+                token1=float(fees1_h),
+                usd=(float(fees_usd) if fees_usd is not None else None),
+            ),
 
-            "last_rebalance_ts": int(last_rebalance_ts),
+            last_rebalance_ts=int(last_rebalance_ts),
 
-            "has_gauge": bool(has_gauge),
-            "staked": bool(staked),
-            "position_location": position_location,
+            has_gauge=bool(has_gauge),
+            staked=bool(staked),
+            position_location=str(position_location),
 
-            "gauge_rewards": gauge_rewards,
-            "gauge_reward_balances": gauge_reward_balances,
-        }
+            gauge_rewards=GaugeRewardsOut(**gauge_rewards),
+            gauge_reward_balances=GaugeRewardBalancesOut(**gauge_reward_balances),
+        )
+
+        return out.model_dump()

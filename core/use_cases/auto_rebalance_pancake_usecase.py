@@ -13,6 +13,7 @@ from adapters.external.database.vault_client_registry_repository_mongodb import 
 from config import get_settings
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
+from core.domain.schemas.onchain_types import AutoRebalancePancakeParams, PoolMeta, RangeDebug, RangeUsed
 from core.services.tx_service import TxService
 from core.services.utils import to_json_safe
 
@@ -112,7 +113,7 @@ class AutoRebalancePancakeUseCase:
     def _pool_contract(self, pool_addr: str) -> Contract:
         return self.w3.eth.contract(address=Web3.to_checksum_address(pool_addr), abi=ABI_PANCAKE_V3_POOL_MIN)
 
-    def _pool_meta(self, pool_addr: str) -> Dict[str, Any]:
+    def _pool_meta(self, pool_addr: str) -> PoolMeta:
         pool = self._pool_contract(pool_addr)
 
         token0 = Web3.to_checksum_address(pool.functions.token0().call())
@@ -136,16 +137,16 @@ class AutoRebalancePancakeUseCase:
         spacing = int(pool.functions.tickSpacing().call())
         fee = int(pool.functions.fee().call())
 
-        return {
-            "token0": token0,
-            "token1": token1,
-            "dec0": dec0,
-            "dec1": dec1,
-            "sym0": sym0,
-            "sym1": sym1,
-            "spacing": spacing,
-            "fee": fee,
-        }
+        return PoolMeta(
+            token0=token0,
+            token1=token1,
+            dec0=dec0,
+            dec1=dec1,
+            sym0=sym0,
+            sym1=sym1,
+            spacing=spacing,
+            fee=fee,
+        )
 
     def _resolve_range_ticks(
         self,
@@ -155,13 +156,8 @@ class AutoRebalancePancakeUseCase:
         new_upper: Optional[int],
         lower_price: Optional[float],
         upper_price: Optional[float],
-    ) -> Tuple[int, int, Dict[str, Any]]:
+    ) -> Tuple[int, int, RangeDebug]:
         meta = self._pool_meta(pool_addr)
-        dec0 = int(meta["dec0"])
-        dec1 = int(meta["dec1"])
-        sym0 = str(meta["sym0"])
-        sym1 = str(meta["sym1"])
-        spacing = int(meta["spacing"] or 0)
 
         # ticks directly provided
         if new_lower is not None and new_upper is not None:
@@ -171,38 +167,38 @@ class AutoRebalancePancakeUseCase:
             if lower_price is None or upper_price is None:
                 raise ValueError("You must provide either (new_lower and new_upper) OR (lower_price and upper_price).")
 
-            pL = _ui_price_to_p_t1_t0(float(lower_price), sym0, sym1)
-            pU = _ui_price_to_p_t1_t0(float(upper_price), sym0, sym1)
+            pL = _ui_price_to_p_t1_t0(float(lower_price), meta.sym0, meta.sym1)
+            pU = _ui_price_to_p_t1_t0(float(upper_price), meta.sym0, meta.sym1)
 
-            lower_tick = _price_to_tick(pL, dec0, dec1)
-            upper_tick = _price_to_tick(pU, dec0, dec1)
+            lower_tick = _price_to_tick(pL, meta.dec0, meta.dec1)
+            upper_tick = _price_to_tick(pU, meta.dec0, meta.dec1)
 
         # ensure ascending
         if lower_tick > upper_tick:
             lower_tick, upper_tick = upper_tick, lower_tick
 
         # align spacing
-        if spacing:
-            lower_tick = _align_floor(lower_tick, spacing)
-            upper_tick = _align_ceil(upper_tick, spacing)
+        if meta.spacing:
+            lower_tick = _align_floor(lower_tick, meta.spacing)
+            upper_tick = _align_ceil(upper_tick, meta.spacing)
 
         # avoid collapse
         if lower_tick == upper_tick:
-            step = spacing or 1
+            step = meta.spacing or 1
             lower_tick -= step
             upper_tick += step
 
         if int(lower_tick) >= int(upper_tick):
             raise ValueError("Resolved ticks invalid (lower >= upper). Check provided prices.")
 
-        debug = {
-            "sym0": sym0,
-            "sym1": sym1,
-            "dec0": dec0,
-            "dec1": dec1,
-            "spacing": spacing,
-        }
-        return int(lower_tick), int(upper_tick), debug
+        dbg = RangeDebug(
+            sym0=meta.sym0,
+            sym1=meta.sym1,
+            dec0=meta.dec0,
+            dec1=meta.dec1,
+            spacing=meta.spacing,
+        )
+        return int(lower_tick), int(upper_tick), dbg
 
     def auto_rebalance_pancake(
         self,
@@ -219,7 +215,7 @@ class AutoRebalancePancakeUseCase:
         swap_amount_out_min: int,
         sqrt_price_limit_x96: int = 0,
         gas_strategy: str = "buffered",
-    ) -> Dict[str, Any]:
+    ) -> dict:
         ent = self._get_vault_by_alias(alias)
 
         dex = (ent.dex or "").strip().lower()
@@ -244,33 +240,37 @@ class AutoRebalancePancakeUseCase:
 
         # infer fee from pool if missing
         if fee is None:
-            fee = int(self._pool_meta(pool_addr)["fee"])
+            fee = int(self._pool_meta(pool_addr).fee)
 
         if swap_amount_in > 0 and (fee is None or int(fee) <= 0):
             raise ValueError("fee is required (or inferable) when swap_amount_in > 0")
 
-        cv = ClientVaultAdapter(w3=self.w3, address=vault_addr)
-
-        fn = cv.fn_auto_rebalance_pancake(
-            new_lower=int(lower_tick),
-            new_upper=int(upper_tick),
-            fee=int(fee),
-            token_in=token_in,
-            token_out=token_out,
-            swap_amount_in=int(swap_amount_in),
-            swap_amount_out_min=int(swap_amount_out_min),
-            sqrt_price_limit_x96=int(sqrt_price_limit_x96 or 0),
+        params = AutoRebalancePancakeParams(
+            **{
+                "newLower": int(lower_tick),
+                "newUpper": int(upper_tick),
+                "fee": int(fee),
+                "tokenIn": token_in,
+                "tokenOut": token_out,
+                "swapAmountIn": int(swap_amount_in),
+                "swapAmountOutMin": int(swap_amount_out_min),
+                "sqrtPriceLimitX96": int(sqrt_price_limit_x96 or 0),
+            }
         )
 
+        cv = ClientVaultAdapter(w3=self.w3, address=vault_addr)
+        fn = cv.fn_auto_rebalance_pancake(params)
+
         tx_any = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
+
         return to_json_safe(
             {
                 "tx": tx_any,
                 "alias": ent.alias,
                 "vault_address": Web3.to_checksum_address(vault_addr),
                 "pool_address": Web3.to_checksum_address(pool_addr),
-                "range_used": {"lower_tick": int(lower_tick), "upper_tick": int(upper_tick)},
+                "range_used": RangeUsed(lower_tick=int(lower_tick), upper_tick=int(upper_tick)).model_dump(),
                 "fee_used": int(fee),
-                "range_debug": range_dbg,
+                "range_debug": range_dbg.model_dump(),
             }
         )
