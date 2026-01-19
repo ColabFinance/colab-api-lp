@@ -12,7 +12,7 @@ class SwapPoolRef(BaseModel):
     dex: str
     pool: str
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
 
 
 class VaultConfig(BaseModel):
@@ -27,7 +27,7 @@ class VaultConfig(BaseModel):
 
     swap_pools: Dict[str, SwapPoolRef] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
 
 
 class VaultOnchainInfo(BaseModel):
@@ -68,7 +68,7 @@ class VaultOnchainInfo(BaseModel):
     fees_uncollected: Optional[Dict[str, Any]] = None
     last_rebalance_ts: Optional[int] = None
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
 
 
 class VaultRegistryEntity(MongoEntity):

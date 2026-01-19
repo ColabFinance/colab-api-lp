@@ -1,7 +1,5 @@
-# adapters/external/database/vault_state_repository.py
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from pymongo.collection import Collection
@@ -17,130 +15,88 @@ class VaultStateRepository(VaultStateRepositoryInterface):
     """
     Repository responsible for storing and retrieving the *current* vault state.
 
-    One document per (dex, alias) combination is stored in the 'vault_state'
-    collection and mapped to a `VaultStateDocument` entity. The public API
-    still exposes the inner `state` dictionary for convenience.
+    Collection: vault_state
     """
 
     COLLECTION_NAME = "vault_state"
 
     def __init__(self, db: Optional[Database] = None) -> None:
-        """
-        Initialize the repository.
-
-        Args:
-            db: Optional MongoDB database instance. If omitted, the default
-                vaults database is obtained via get_mongo_db().
-        """
         self._db: Database = db or get_mongo_db()
         self._collection: Collection = self._db[self.COLLECTION_NAME]
+        self.ensure_indexes()
 
     @property
     def collection(self) -> Collection:
-        """
-        Return the underlying MongoDB collection.
-
-        This is mainly intended for administrative tasks such as index creation.
-        """
         return self._collection
 
     def ensure_indexes(self) -> None:
-        """
-        Ensure that the required indexes exist on the collection.
-
-        - Unique composite index on (dex, alias) so each vault has a single state document.
-        """
         self._collection.create_index(
             [("dex", 1), ("alias", 1)],
             unique=True,
             name="ux_vault_state_dex_alias",
         )
 
-    # ---------- internal helpers for entities ----------
-
     def _get_state_doc(self, dex: str, alias: str) -> Optional[VaultStateDocument]:
-        """
-        Fetch the full VaultStateDocument entity for a given (dex, alias).
-
-        Returns:
-            A `VaultStateDocument` or None if no document exists.
-        """
         doc = self._collection.find_one({"dex": dex, "alias": alias})
-        return VaultStateDocument.from_mongo(doc) if doc else None
+        return VaultStateDocument.from_mongo(doc)
 
     def _upsert_state_doc(self, dex: str, alias: str, state: Dict[str, Any]) -> VaultStateDocument:
-        """
-        Upsert the underlying VaultStateDocument entity for (dex, alias).
-        """
-        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        existing = self._collection.find_one({"dex": dex, "alias": alias})
 
-        existing_doc = self._collection.find_one({"dex": dex, "alias": alias})
-        if existing_doc:
-            entity = VaultStateDocument.from_mongo(existing_doc)
+        if existing:
+            entity = VaultStateDocument.from_mongo(existing)
+            if entity is None:
+                raise RuntimeError("Failed to parse an existing vault_state document.")
+
             entity.state = state
-            entity.updated_at = now
+
+            now_ms = entity.now_ms()
+            now_iso = entity.now_iso()
+
+            # preserve created_* if present, otherwise set (defensive)
+            if entity.created_at is None:
+                entity.created_at = now_ms
+            if entity.created_at_iso is None:
+                entity.created_at_iso = now_iso
+
+            entity.updated_at = now_ms
+            entity.updated_at_iso = now_iso
+
             self._collection.update_one(
-                {"_id": entity.id},
-                {"$set": {"state": entity.state, "updated_at": entity.updated_at}},
+                {"_id": existing["_id"]},
+                {"$set": sanitize_for_mongo(entity.to_mongo())},
             )
             return entity
 
-        entity = VaultStateDocument(
-            dex=dex,
-            alias=alias,
-            state=state,
-            created_at=now,
-            updated_at=now,
-        )
-        mongo_doc = entity.to_mongo()
-        mongo_doc = sanitize_for_mongo(mongo_doc)
-        result = self._collection.insert_one(mongo_doc)
-        entity.id = result.inserted_id
-        return entity
+        entity = VaultStateDocument(dex=dex, alias=alias, state=state)
 
-    # ---------- public API (dict-based state) ----------
+        now_ms = entity.now_ms()
+        now_iso = entity.now_iso()
+        entity.created_at = now_ms
+        entity.created_at_iso = now_iso
+        entity.updated_at = now_ms
+        entity.updated_at_iso = now_iso
+
+        mongo_doc = sanitize_for_mongo(entity.to_mongo())
+        res = self._collection.insert_one(mongo_doc)
+
+        saved = dict(mongo_doc)
+        saved["_id"] = res.inserted_id
+        parsed = VaultStateDocument.from_mongo(saved)
+        if parsed is None:
+            raise RuntimeError("Failed to parse inserted vault_state document.")
+        return parsed
 
     def get_state(self, dex: str, alias: str) -> Dict[str, Any]:
-        """
-        Fetch the current state payload for a given (dex, alias).
-
-        Args:
-            dex: DEX identifier (e.g. 'uniswap', 'aerodrome', 'pancake').
-            alias: Logical vault alias.
-
-        Returns:
-            A dictionary containing the 'state' payload, or an empty dict if no state exists.
-        """
         entity = self._get_state_doc(dex, alias)
         if entity is None:
             return {}
         return entity.state or {}
 
     def upsert_state(self, dex: str, alias: str, state: Dict[str, Any]) -> None:
-        """
-        Replace or create the state document for a given (dex, alias).
-
-        Args:
-            dex: DEX identifier.
-            alias: Vault alias.
-            state: Full state payload to be stored in the 'state' field.
-        """
         self._upsert_state_doc(dex, alias, state)
 
     def patch_state(self, dex: str, alias: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Perform a shallow merge of the provided updates into the 'state' field.
-
-        If no state document exists yet, one is created with only the provided fields.
-
-        Args:
-            dex: DEX identifier.
-            alias: Vault alias.
-            updates: Partial state payload to merge into the existing state.
-
-        Returns:
-            The resulting state dictionary after the patch.
-        """
         current_state = self.get_state(dex, alias)
         current_state.update(updates)
         self._upsert_state_doc(dex, alias, current_state)
