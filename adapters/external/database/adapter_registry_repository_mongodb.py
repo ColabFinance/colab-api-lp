@@ -7,7 +7,8 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity, AdapterStatus
+from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity
+from core.domain.enums.adapter_enums import AdapterStatus
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
 
 

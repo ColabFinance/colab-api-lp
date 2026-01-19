@@ -7,7 +7,8 @@ from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.strategy_factory_repository_mongodb import StrategyRepositoryMongoDB
 from adapters.external.database.vault_factory_repository_mongodb import VaultFactoryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity, VaultFactoryEntity
+from core.domain.entities.factory_entities import StrategyFactoryEntity, VaultFactoryEntity
+from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 from core.domain.repositories.vault_factory_repository_interface import VaultFactoryRepository
 from core.services.tx_service import TxService

@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity, AdapterStatus
+from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity
+from core.domain.enums.adapter_enums import AdapterStatus
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
 from core.services.tx_service import TxService
 

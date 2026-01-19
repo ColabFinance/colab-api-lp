@@ -5,20 +5,9 @@ from typing import Optional
 
 from pydantic import ConfigDict
 
+from core.domain.enums.factory_enums import FactoryStatus
+
 from .base_entity import MongoEntity
-
-
-class FactoryStatus(StrEnum):
-    """
-    Status values stored in Mongo.
-
-    Rules:
-    - ACTIVE: this factory is currently used by the system.
-    - ARCHIVED_CAN_CREATE_NEW: creation is allowed if the latest factory is in this status.
-    """
-
-    ACTIVE = "ACTIVE"
-    ARCHIVED_CAN_CREATE_NEW = "ARCHIVED_CAN_CREATE_NEW"
 
 
 class StrategyFactoryEntity(MongoEntity):

@@ -7,7 +7,8 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity
+from core.domain.entities.factory_entities import StrategyFactoryEntity
+from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 
 
