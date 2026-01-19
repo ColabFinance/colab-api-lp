@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Optional, Sequence
 
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
-
-from core.domain.entities.factory_entities import StrategyFactoryEntity, FactoryStatus
+from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
+from core.domain.entities.factory_entities import FactoryStatus, StrategyFactoryEntity
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 
 
 class StrategyRepositoryMongoDB(StrategyRepository):
     """
-    Repository for StrategyRegistry (on-chain) factory records.
+    Repository for StrategyRegistry factory records.
 
     Collection: strategy_factories
     """
@@ -25,6 +23,7 @@ class StrategyRepositoryMongoDB(StrategyRepository):
     def __init__(self, db: Optional[Database] = None) -> None:
         self._db: Database = db or get_mongo_db()
         self._collection: Collection = self._db[self.COLLECTION_NAME]
+        self.ensure_indexes()
 
     @property
     def collection(self) -> Collection:
@@ -34,33 +33,32 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         self._collection.create_index([("chain", 1)], name="ix_strategy_factories_chain")
         self._collection.create_index([("status", 1)], name="ix_strategy_factories_status")
         self._collection.create_index([("created_at", -1)], name="ix_strategy_factories_created_at_desc")
+        self._collection.create_index([("address", 1)], unique=True, name="ux_strategy_factories_address")
 
-    def _to_entity(self, doc: dict) -> StrategyFactoryEntity:
-        return StrategyFactoryEntity(
-            chain=str(doc.get("chain") or "").strip(),
-            address=str(doc["address"]),
-            status=FactoryStatus(str(doc["status"])),
-            created_at=datetime.fromisoformat(doc["created_at"]),
-            tx_hash=doc.get("tx_hash"),
-        )
+    def _touch_for_insert(self, entity: StrategyFactoryEntity) -> StrategyFactoryEntity:
+        now_ms = entity.now_ms()
+        now_iso = entity.now_iso()
+
+        if entity.created_at is None:
+            entity.created_at = now_ms
+        if entity.created_at_iso is None:
+            entity.created_at_iso = now_iso
+
+        entity.updated_at = now_ms
+        entity.updated_at_iso = now_iso
+        return entity
 
     def get_latest(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
         doc = self._collection.find_one({"chain": chain}, sort=[("created_at", -1)])
-        return self._to_entity(doc) if doc else None
+        return StrategyFactoryEntity.from_mongo(doc)
 
     def get_active(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
         doc = self._collection.find_one({"chain": chain, "status": FactoryStatus.ACTIVE.value})
-        return self._to_entity(doc) if doc else None
+        return StrategyFactoryEntity.from_mongo(doc)
 
     def insert(self, entity: StrategyFactoryEntity) -> None:
-        doc = {
-            "chain": entity.chain,
-            "address": entity.address,
-            "status": entity.status.value,
-            "created_at": entity.created_at.isoformat(),
-            "tx_hash": entity.tx_hash,
-        }
-        doc = sanitize_for_mongo(doc)
+        entity = self._touch_for_insert(entity)
+        doc = sanitize_for_mongo(entity.to_mongo())
         self._collection.insert_one(doc)
 
     def set_all_status(self, *, chain: str, status: FactoryStatus) -> int:
@@ -69,4 +67,4 @@ class StrategyRepositoryMongoDB(StrategyRepository):
 
     def list_all(self, *, chain: str, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
         cursor = self._collection.find({"chain": chain}, sort=[("created_at", -1)]).limit(int(limit))
-        return [self._to_entity(d) for d in cursor]
+        return [StrategyFactoryEntity.from_mongo(d) for d in cursor if d]
