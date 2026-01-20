@@ -5,96 +5,92 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
 from web3 import Web3
 from web3.exceptions import BadFunctionCallOutput, ContractLogicError
+
+from adapters.chain.artifacts import load_abi_from_out, load_abi_json
 from .base import DexAdapter
 from adapters.chain.utils import get_sqrt_ratio_at_tick, get_amounts_for_liquidity
 
 
-ABI_ERC20 = [
-    {"name":"decimals","outputs":[{"type":"uint8"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"symbol","outputs":[{"type":"string"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"balanceOf","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"transfer","outputs":[{"type":"bool"}],"inputs":[{"type":"address"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-]
-ABI_ADAPTER_MIN = [
-    {"name":"minCooldown","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"lastRebalance","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"tickSpacing","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
-]
-ABI_VAULT = [
-    {"name":"adapter","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenId","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenIdView","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"openInitialPosition","outputs":[],"inputs":[{"type":"int24"},{"type":"int24"}],"stateMutability":"nonpayable","type":"function"},
-    {"name":"rebalanceWithCaps","outputs":[{"type":"uint128"}],"inputs":[{"type":"int24"},{"type":"int24"},{"type":"uint256"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-    {"name":"exitPositionToVault","outputs":[],"inputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"name":"exitPositionAndWithdrawAll","outputs":[],"inputs":[{"type":"address"}],"stateMutability":"nonpayable","type":"function"},
-    {"name":"collectToVault","outputs":[{"type":"uint256"},{"type":"uint256"}],"inputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"name":"stake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
-    {"name":"unstake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
-    {"name":"claimRewards", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
-    {"name":"swapExactInAero","outputs":[{"type":"uint256"}],"inputs":[
-        {"type":"address","name":"router"},
-        {"type":"address","name":"tokenIn"},
-        {"type":"address","name":"tokenOut"},
-        {"type":"int24","name":"tickSpacing"},
-        {"type":"uint256","name":"amountIn"},
-        {"type":"uint256","name":"amountOutMinimum"},
-        {"type":"uint160","name":"sqrtPriceLimitX96"}
-    ],"stateMutability":"nonpayable","type":"function"},
-        {"name":"swapExactInAMM","outputs":[{"type":"uint256"}],"inputs":[
-        {"type":"address","name":"router"},
-        {"type":"address","name":"tokenIn"},
-        {"type":"address","name":"tokenOut"},
-        {"type":"bool","name":"stable"},
-        {"type":"address","name":"factory"},
-        {"type":"uint256","name":"amountIn"},
-        {"type":"uint256","name":"amountOutMinimum"}
-    ],"stateMutability":"nonpayable","type":"function"},
-]
+# ABI_ERC20 = [
+#     {"name":"decimals","outputs":[{"type":"uint8"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"symbol","outputs":[{"type":"string"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"balanceOf","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
+#     {"name":"transfer","outputs":[{"type":"bool"}],"inputs":[{"type":"address"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
+# ]
+# ABI_ADAPTER_MIN = [
+#     {"name":"minCooldown","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"lastRebalance","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
+#     {"name":"tickSpacing","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
+# ]
+# ABI_VAULT = [
+#     {"name":"adapter","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"positionTokenId","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"positionTokenIdView","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
+#     {"name":"openInitialPosition","outputs":[],"inputs":[{"type":"int24"},{"type":"int24"}],"stateMutability":"nonpayable","type":"function"},
+#     {"name":"rebalanceWithCaps","outputs":[{"type":"uint128"}],"inputs":[{"type":"int24"},{"type":"int24"},{"type":"uint256"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
+#     {"name":"exitPositionToVault","outputs":[],"inputs":[],"stateMutability":"nonpayable","type":"function"},
+#     {"name":"exitPositionAndWithdrawAll","outputs":[],"inputs":[{"type":"address"}],"stateMutability":"nonpayable","type":"function"},
+#     {"name":"collectToVault","outputs":[{"type":"uint256"},{"type":"uint256"}],"inputs":[],"stateMutability":"nonpayable","type":"function"},
+#     {"name":"stake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
+#     {"name":"unstake", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
+#     {"name":"claimRewards", "outputs":[], "inputs":[], "stateMutability": "nonpayable","type":"function"},
+#     {"name":"swapExactInAero","outputs":[{"type":"uint256"}],"inputs":[
+#         {"type":"address","name":"router"},
+#         {"type":"address","name":"tokenIn"},
+#         {"type":"address","name":"tokenOut"},
+#         {"type":"int24","name":"tickSpacing"},
+#         {"type":"uint256","name":"amountIn"},
+#         {"type":"uint256","name":"amountOutMinimum"},
+#         {"type":"uint160","name":"sqrtPriceLimitX96"}
+#     ],"stateMutability":"nonpayable","type":"function"},
+#         {"name":"swapExactInAMM","outputs":[{"type":"uint256"}],"inputs":[
+#         {"type":"address","name":"router"},
+#         {"type":"address","name":"tokenIn"},
+#         {"type":"address","name":"tokenOut"},
+#         {"type":"bool","name":"stable"},
+#         {"type":"address","name":"factory"},
+#         {"type":"uint256","name":"amountIn"},
+#         {"type":"uint256","name":"amountOutMinimum"}
+#     ],"stateMutability":"nonpayable","type":"function"},
+# ]
 
-ABI_AERO_QUOTER = [
-    {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
-    {"inputs":[],"name":"WETH9","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-    {"inputs":[],"name":"factory","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-    {"inputs":[{"components":[
-        {"internalType":"address","name":"tokenIn","type":"address"},
-        {"internalType":"address","name":"tokenOut","type":"address"},
-        {"internalType":"uint256","name":"amountIn","type":"uint256"},
-        {"internalType":"int24","name":"tickSpacing","type":"int24"},
-        {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],
-      "internalType":"struct IQuoterV2.QuoteExactInputSingleParams","name":"params","type":"tuple"}],
-     "name":"quoteExactInputSingle",
-     "outputs":[
-        {"internalType":"uint256","name":"amountOut","type":"uint256"},
-        {"internalType":"uint160","name":"sqrtPriceX96After","type":"uint160"},
-        {"internalType":"uint32","name":"initializedTicksCrossed","type":"uint32"},
-        {"internalType":"uint256","name":"gasEstimate","type":"uint256"}],
-     "stateMutability":"nonpayable","type":"function"}
-]
+# ABI_AERO_QUOTER = [
+#     {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
+#     {"inputs":[],"name":"WETH9","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+#     {"inputs":[],"name":"factory","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+#     {"inputs":[{"components":[
+#         {"internalType":"address","name":"tokenIn","type":"address"},
+#         {"internalType":"address","name":"tokenOut","type":"address"},
+#         {"internalType":"uint256","name":"amountIn","type":"uint256"},
+#         {"internalType":"int24","name":"tickSpacing","type":"int24"},
+#         {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],
+#       "internalType":"struct IQuoterV2.QuoteExactInputSingleParams","name":"params","type":"tuple"}],
+#      "name":"quoteExactInputSingle",
+#      "outputs":[
+#         {"internalType":"uint256","name":"amountOut","type":"uint256"},
+#         {"internalType":"uint160","name":"sqrtPriceX96After","type":"uint160"},
+#         {"internalType":"uint32","name":"initializedTicksCrossed","type":"uint32"},
+#         {"internalType":"uint256","name":"gasEstimate","type":"uint256"}],
+#      "stateMutability":"nonpayable","type":"function"}
+# ]
 
-ABI_AERO_ROUTER = [
-    {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
-    {"inputs":[{"components":[
-        {"internalType":"address","name":"tokenIn","type":"address"},
-        {"internalType":"address","name":"tokenOut","type":"address"},
-        {"internalType":"int24","name":"tickSpacing","type":"int24"},
-        {"internalType":"address","name":"recipient","type":"address"},
-        {"internalType":"uint256","name":"deadline","type":"uint256"},
-        {"internalType":"uint256","name":"amountIn","type":"uint256"},
-        {"internalType":"uint256","name":"amountOutMinimum","type":"uint256"},
-        {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],
-      "internalType":"struct ISwapRouter.ExactInputSingleParams","name":"params","type":"tuple"}],
-     "name":"exactInputSingle","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"}],
-     "stateMutability":"payable","type":"function"}
-]
+# ABI_AERO_ROUTER = [
+#     {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
+#     {"inputs":[{"components":[
+#         {"internalType":"address","name":"tokenIn","type":"address"},
+#         {"internalType":"address","name":"tokenOut","type":"address"},
+#         {"internalType":"int24","name":"tickSpacing","type":"int24"},
+#         {"internalType":"address","name":"recipient","type":"address"},
+#         {"internalType":"uint256","name":"deadline","type":"uint256"},
+#         {"internalType":"uint256","name":"amountIn","type":"uint256"},
+#         {"internalType":"uint256","name":"amountOutMinimum","type":"uint256"},
+#         {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],
+#       "internalType":"struct ISwapRouter.ExactInputSingleParams","name":"params","type":"tuple"}],
+#      "name":"exactInputSingle","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"}],
+#      "stateMutability":"payable","type":"function"}
+# ]
 
 U128_MAX = (1<<128) - 1
-
-ABI_DIR = Path("libs/abi/aerodrome")
-
-def _load_abi_json(name: str) -> list:
-    p = ABI_DIR / name
-    return json.loads(p.read_text(encoding="utf-8"))
 
 class AerodromeAdapter(DexAdapter):
     """
@@ -102,14 +98,14 @@ class AerodromeAdapter(DexAdapter):
     Uses the same v3 math/ABIs pattern as UniswapV3Adapter.
     """
 
-    def pool_abi(self) -> list:         return _load_abi_json("PoolImplementation.json")
-    def nfpm_abi(self) -> list:         return _load_abi_json("NonfungiblePositionManager.json")
-    def factory_abi(self) -> list:      return _load_abi_json("PoolFactory.json")
-    def gauge_impl_abi(self) -> list:   return _load_abi_json("GaugeImplementation.json")
-    def erc20_abi(self) -> list:        return ABI_ERC20
-    def vault_abi(self) -> list:        return ABI_VAULT
-    def factory_amm_abi(self) -> list:    return _load_abi_json("PoolFactoryAMM.json")
-    def router_amm_abi(self) -> list:    return _load_abi_json("RouterAMM.json")
+    def pool_abi(self) -> list:         return load_abi_json("aerodrome","PoolImplementation.json")
+    def nfpm_abi(self) -> list:         return load_abi_json("aerodrome","NonfungiblePositionManager.json")
+    def factory_abi(self) -> list:      return load_abi_json("aerodrome","PoolFactory.json")
+    def gauge_impl_abi(self) -> list:   return load_abi_json("aerodrome","GaugeImplementation.json")
+    def erc20_abi(self) -> list:        return load_abi_from_out("common", "ERC20.json")
+    def vault_abi(self) -> list:        return load_abi_from_out("vaults","ClientVault.json")
+    def factory_amm_abi(self) -> list:    return load_abi_json("aerodrome","PoolFactoryAMM.json")
+    def router_amm_abi(self) -> list:    return load_abi_json("aerodrome","RouterAMM.json")
 
     # ---- contracts helpers ----
     def pool_contract(self):
@@ -171,7 +167,7 @@ class AerodromeAdapter(DexAdapter):
             adapter_addr = self.vault.functions.adapter().call()
             if int(adapter_addr, 16) == 0:
                 return None
-            return self.w3.eth.contract(address=Web3.to_checksum_address(adapter_addr), abi=ABI_ADAPTER_MIN)
+            return self.w3.eth.contract(address=Web3.to_checksum_address(adapter_addr), abi=load_abi_from_out("vaults","SlipstreamAdapter.json"))
         except Exception:
             return None
     
@@ -186,10 +182,7 @@ class AerodromeAdapter(DexAdapter):
             return None
     
     def aerodrome_quoter(self, addr: str):
-        return self.w3.eth.contract(address=Web3.to_checksum_address(addr), abi=ABI_AERO_QUOTER)
-
-    def aerodrome_router(self, addr: str):
-        return self.w3.eth.contract(address=Web3.to_checksum_address(addr), abi=ABI_AERO_ROUTER)
+        return self.w3.eth.contract(address=Web3.to_checksum_address(addr), abi=load_abi_from_out("vaults","Quoter.json"))
 
     def tick_spacing_for_pool(self, pool_addr: str) -> int:
         c = self.w3.eth.contract(address=Web3.to_checksum_address(pool_addr), abi=self.pool_abi())

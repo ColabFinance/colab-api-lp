@@ -2,35 +2,24 @@
 import os
 from typing import Dict, Any, Tuple, Optional
 from web3 import Web3
+
+from adapters.chain.artifacts import load_abi_json, load_abi_from_out
 from .base import DexAdapter
 from adapters.chain.utils import get_sqrt_ratio_at_tick, get_amounts_for_liquidity
 from config import get_settings
 
 
-ABI_ERC20 = [
-    {"name":"decimals","outputs":[{"type":"uint8"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"symbol","outputs":[{"type":"string"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"balanceOf","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"transfer","outputs":[{"type":"bool"}],"inputs":[{"type":"address"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-]
-
 U128_MAX = (1<<128) - 1
 
-import json
-from pathlib import Path
-ABI_DIR = Path("libs/abi/pancake")
-def _load_abi_json(name: str) -> list:
-    p = ABI_DIR / name
-    return json.loads(p.read_text(encoding="utf-8"))
 
 class PancakeV3Adapter(DexAdapter):
     """Adapter para PancakeSwap v3 (Uniswap v3-like) + MasterChefV3 farms."""
 
-    def pool_abi(self) -> list:         return _load_abi_json("Pool.json")
-    def nfpm_abi(self) -> list:         return _load_abi_json("NonfungiblePositionManager.json")
-    def erc20_abi(self) -> list:   return ABI_ERC20
-    def quoter_abi(self) -> list:  return _load_abi_json("QuoterV2.json")
-    def masterchef_abi(self) -> list: return _load_abi_json("MasterChefV3.json")
+    def pool_abi(self) -> list:         return load_abi_json("pancake","Pool.json")
+    def nfpm_abi(self) -> list:         return load_abi_json("pancake","NonfungiblePositionManager.json")
+    def erc20_abi(self) -> list:        return load_abi_from_out("common","ERC20.json")
+    def quoter_abi(self) -> list:       return load_abi_json("pancake","QuoterV2.json")
+    def masterchef_abi(self) -> list:   return load_abi_json("pancake","MasterChefV3.json")
 
     # ---------- contratos ----------
     def pool_contract(self):

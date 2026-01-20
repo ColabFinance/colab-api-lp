@@ -121,7 +121,7 @@ class AdminAdaptersUseCase:
             raise ValueError("status must be ACTIVE or INACTIVE")
 
         # Deploy on-chain (PancakeV3Adapter)
-        abi, bytecode = load_contract_from_out("PancakeV3Adapter.sol", "PancakeV3Adapter.json")
+        abi, bytecode = load_contract_from_out("vaults", "PancakeV3Adapter.json")
 
         res = self.txs.deploy(
             abi=abi,

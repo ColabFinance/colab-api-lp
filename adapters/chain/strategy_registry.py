@@ -5,82 +5,7 @@ from web3.contract import Contract
 from web3.exceptions import ContractLogicError
 from web3.contract.contract import ContractFunction
 
-
-ABI_STRATEGY_REGISTRY = [
-    {
-        "name": "getStrategy",
-        "inputs": [
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
-        ],
-        "outputs": [
-            {
-                "internalType": "struct StrategyRegistry.Strategy",
-                "name": "s",
-                "type": "tuple",
-                "components": [
-                    {"internalType": "address", "name": "adapter", "type": "address"},
-                    {"internalType": "address", "name": "dexRouter", "type": "address"},
-                    {"internalType": "address", "name": "token0", "type": "address"},
-                    {"internalType": "address", "name": "token1", "type": "address"},
-                    {"internalType": "string", "name": "name", "type": "string"},
-                    {"internalType": "string", "name": "description", "type": "string"},
-                    {"internalType": "bool", "name": "active", "type": "bool"},
-                ],
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "name": "isStrategyActive",
-        "inputs": [
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
-        ],
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    # OPTIONAL: for listing
-    {
-        "name": "getAllStrategiesByOwner",
-        "inputs": [{"internalType": "address", "name": "owner", "type": "address"}],
-        "outputs": [
-            {
-                "internalType": "struct StrategyRegistry.Strategy[]",
-                "name": "all",
-                "type": "tuple[]",
-                "components": [
-                    {"internalType": "address", "name": "adapter", "type": "address"},
-                    {"internalType": "address", "name": "dexRouter", "type": "address"},
-                    {"internalType": "address", "name": "token0", "type": "address"},
-                    {"internalType": "address", "name": "token1", "type": "address"},
-                    {"internalType": "string", "name": "name", "type": "string"},
-                    {"internalType": "string", "name": "description", "type": "string"},
-                    {"internalType": "bool", "name": "active", "type": "bool"},
-                ],
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "anonymous": False,
-        "name": "StrategyRegistered",
-        "type": "event",
-        "inputs": [
-            {"indexed": True, "internalType": "address", "name": "owner", "type": "address"},
-            {"indexed": True, "internalType": "uint256", "name": "strategyId", "type": "uint256"},
-            {"indexed": True, "internalType": "address", "name": "adapter", "type": "address"},
-            {"indexed": False, "internalType": "address", "name": "dexRouter", "type": "address"},
-            {"indexed": False, "internalType": "address", "name": "token0", "type": "address"},
-            {"indexed": False, "internalType": "address", "name": "token1", "type": "address"},
-            {"indexed": False, "internalType": "string", "name": "name", "type": "string"},
-        ],
-    },
-]
-
+from adapters.chain.artifacts import load_abi_from_out
 
 
 class StrategyRegistryAdapter:
@@ -99,7 +24,7 @@ class StrategyRegistryAdapter:
         self.address = Web3.to_checksum_address(address)
         self.contract: Contract = w3.eth.contract(
             address=self.address,
-            abi=ABI_STRATEGY_REGISTRY,
+            abi=load_abi_from_out("vaults", "StrategyRegistry.json")
         )
 
     # ------------------------------------------------------------------ #
