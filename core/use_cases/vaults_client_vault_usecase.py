@@ -7,7 +7,9 @@ from typing import Any, Dict, Optional
 
 from web3 import Web3
 from web3.contract.contract import Contract
+from web3.exceptions import ContractLogicError, BadFunctionCallOutput
 
+from adapters.chain.client_vault import ClientVaultAdapter
 from adapters.chain.strategy_registry import StrategyRegistryAdapter
 from adapters.chain.vault_factory import VaultFactoryAdapter
 from adapters.external.database.mongo_client import get_mongo_db
@@ -302,3 +304,99 @@ class VaultClientVaultUseCase:
             swap_pools=swap_pools,
         )
 
+
+    def register_client_vault(
+        self,
+        *,
+        vault_address: str,
+        strategy_id: int,
+        owner: str,
+        chain: str,
+        dex: str,
+        par_token: str,
+        name: str,
+        description: Optional[str],
+        config_in: VaultCreateConfigIn,
+    ) -> Dict[str, Any]:
+
+        if not _is_address_like(vault_address):
+            raise ValueError("Invalid vault_address")
+
+        # idempotência
+        existing = self.vault_registry_repo.find_by_address(
+            Web3.to_checksum_address(vault_address)
+        )
+        if existing:
+            return {
+                "alias": existing.alias,
+                "mongo_id": existing.id,
+            }
+        
+        print("config_in",config_in)
+        
+        rpc_url = (getattr(config_in, "rpc_url", None) or "").strip()
+        if not rpc_url:
+            raise ValueError("config.rpc_url is required to validate on-chain")
+
+        
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
+
+        code = w3.eth.get_code(Web3.to_checksum_address(vault_address))
+        if not code or code == b"":
+            raise ValueError("Vault has no bytecode on provided rpc_url (wrong RPC/network?)")
+            
+        # validação mínima on-chain (com o provider correto)
+        try:
+            vault = ClientVaultAdapter(w3, vault_address)
+
+            onchain_owner = Web3.to_checksum_address(vault.owner())
+            expected_owner = Web3.to_checksum_address(owner)
+
+            if onchain_owner != expected_owner:
+                raise ValueError(f"Vault owner mismatch (onchain={onchain_owner} expected={expected_owner})")
+
+            onchain_strategy_id = int(vault.strategy_id())
+            if int(onchain_strategy_id) != int(strategy_id):
+                raise ValueError(f"Vault strategyId mismatch (onchain={onchain_strategy_id} expected={int(strategy_id)})")
+
+        except (ContractLogicError, BadFunctionCallOutput) as exc:
+            raise ValueError(
+                "Failed to read vault on-chain using provided rpc_url. "
+                "Check if rpc_url/network matches the tx chain and that the address is a ClientVault."
+            ) from exc
+
+        owner_prefix = _norm_owner_prefix(owner)
+        par_token_norm = _norm_slug(par_token).lower()
+
+        idx = self.vault_registry_repo.count_alias_prefix(
+            chain=chain,
+            dex=dex,
+            owner_prefix=owner_prefix,
+            par_token=par_token_norm,
+        ) + 1
+
+        alias = f"{owner_prefix}-{par_token_norm}-{dex}-{chain}-{idx}"
+
+        cfg = config_in.to_domain(address=vault_address)
+
+        entity = VaultRegistryEntity(
+            dex=dex,
+            alias=alias,
+            address=Web3.to_checksum_address(vault_address),
+            config=cfg,
+            is_active=False,
+            chain=chain,
+            owner=Web3.to_checksum_address(owner),
+            par_token=par_token.upper(),
+            name=name.strip(),
+            description=(description.strip() if description else None),
+            strategy_id=int(strategy_id),
+        )
+
+        saved = self.vault_registry_repo.insert(entity)
+
+        return {
+            "alias": alias,
+            "mongo_id": saved.id,
+        }
+        
