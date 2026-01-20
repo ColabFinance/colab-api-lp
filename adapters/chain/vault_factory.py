@@ -4,111 +4,10 @@ from web3 import Web3
 from web3.contract import Contract
 from web3.contract.contract import ContractFunction
 
+from adapters.chain.artifacts import load_abi_from_out
 from core.domain.schemas.onchain_types import VaultFactoryConfig
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-
-ABI_VAULT_FACTORY = [
-    {
-        "name": "owner",
-        "inputs": [],
-        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    # createClientVault
-    {
-        "name": "createClientVault",
-        "inputs": [
-            {"internalType": "uint256", "name": "strategyId", "type": "uint256"},
-            {"internalType": "address", "name": "ownerOverride", "type": "address"},
-        ],
-        "outputs": [
-            {"internalType": "address", "name": "vaultAddr", "type": "address"},
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-    # views
-    {
-        "name": "executor",
-        "inputs": [],
-        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "name": "feeCollector",
-        "inputs": [],
-        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "name": "defaultCooldownSec",
-        "inputs": [],
-        "outputs": [{"internalType": "uint32", "name": "", "type": "uint32"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "name": "defaultMaxSlippageBps",
-        "inputs": [],
-        "outputs": [{"internalType": "uint16", "name": "", "type": "uint16"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "name": "defaultAllowSwap",
-        "inputs": [],
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    # owner-only setters
-    {
-        "name": "setExecutor",
-        "inputs": [
-            {"internalType": "address", "name": "newExecutor", "type": "address"},
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-    {
-        "name": "setFeeCollector",
-        "inputs": [
-            {"internalType": "address", "name": "newCollector", "type": "address"},
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-    {
-        "name": "setDefaults",
-        "inputs": [
-            {"internalType": "uint32", "name": "_cooldownSec", "type": "uint32"},
-            {"internalType": "uint16", "name": "_maxSlippageBps", "type": "uint16"},
-            {"internalType": "bool", "name": "_allowSwap", "type": "bool"},
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-    
-    {
-        "anonymous": False,
-        "name": "ClientVaultDeployed",
-        "type": "event",
-        "inputs": [
-            {"indexed": True, "internalType": "address", "name": "vault", "type": "address"},
-            {"indexed": True, "internalType": "address", "name": "owner", "type": "address"},
-            {"indexed": True, "internalType": "uint256", "name": "strategyId", "type": "uint256"},
-            {"indexed": False, "internalType": "uint256", "name": "vaultIndex", "type": "uint256"}
-        ]
-    },
-]
 
 
 class VaultFactoryAdapter:
@@ -126,7 +25,7 @@ class VaultFactoryAdapter:
         self.address = Web3.to_checksum_address(address)
         self.contract: Contract = w3.eth.contract(
             address=self.address,
-            abi=ABI_VAULT_FACTORY,
+            abi=load_abi_from_out("vaults", "VaultFactory.json")
         )
 
     # ------------------------------------------------------------------ #

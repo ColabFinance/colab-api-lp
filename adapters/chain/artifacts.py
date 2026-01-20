@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 LIBS_ABI_DIR = Path("libs/abi")
-OUT_DIR = Path("out")
 
 
 def load_abi_json(*parts: str) -> list:
@@ -28,9 +27,9 @@ def load_artifact(*parts: str) -> dict[str, Any]:
     Loads a Solidity artifact JSON from out/... path.
 
     Example (Foundry):
-      load_artifact("StrategyFactory.sol", "StrategyFactory.json")
+      load_artifact("vaults", "StrategyFactory.json")
     """
-    p = OUT_DIR.joinpath(*parts)
+    p = LIBS_ABI_DIR.joinpath(*parts)
     if not p.exists():
         raise FileNotFoundError(f"Artifact file not found: {p}")
     data = json.loads(p.read_text(encoding="utf-8"))
@@ -68,7 +67,17 @@ def load_contract_from_out(*parts: str) -> tuple[list, str]:
     Convenience helper: returns (abi, bytecode) from an out artifact.
 
     Example:
-      abi, bytecode = load_contract_from_out("StrategyFactory.sol", "StrategyFactory.json")
+      abi, bytecode = load_contract_from_out("vaults", "StrategyFactory.json")
     """
     art = load_artifact(*parts)
     return artifact_abi(art), artifact_bytecode(art)
+
+def load_abi_from_out(*parts: str) -> list:
+    """
+    Convenience helper: returns (abi, bytecode) from an out artifact.
+
+    Example:
+      abi, bytecode = load_contract_from_out("vaults", "StrategyFactory.json")
+    """
+    art = load_artifact(*parts)
+    return artifact_abi(art)

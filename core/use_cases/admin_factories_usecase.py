@@ -9,6 +9,7 @@ from adapters.external.database.vault_factory_repository_mongodb import VaultFac
 from config import get_settings
 from core.domain.entities.factory_entities import StrategyFactoryEntity, VaultFactoryEntity
 from core.domain.enums.factory_enums import FactoryStatus
+from core.domain.enums.tx_enums import GasStrategy
 from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
 from core.domain.repositories.vault_factory_repository_interface import VaultFactoryRepository
 from core.services.tx_service import TxService
@@ -54,7 +55,7 @@ class AdminFactoriesUseCase:
         *,
         chain: str,
         initial_owner: str,
-        gas_strategy: str = "buffered",
+        gas_strategy: GasStrategy = GasStrategy.BUFFERED,
     ) -> dict:
         chain = (chain or "").strip().lower()
         if not chain:
@@ -63,7 +64,7 @@ class AdminFactoriesUseCase:
         latest = self.strategy_repo.get_latest(chain=chain)
         self._ensure_can_create(latest.status if latest else None)
 
-        abi, bytecode = load_contract_from_out("StrategyRegistry.sol", "StrategyRegistry.json")
+        abi, bytecode = load_contract_from_out("vaults", "StrategyRegistry.json")
 
         res = self.txs.deploy(
             abi=abi,
@@ -109,7 +110,7 @@ class AdminFactoriesUseCase:
         default_cooldown_sec: int = 300,
         default_max_slippage_bps: int = 50,
         default_allow_swap: bool = True,
-        gas_strategy: str = "buffered",
+        gas_strategy: GasStrategy = GasStrategy.BUFFERED,
     ) -> dict:
         chain = (chain or "").strip().lower()
         if not chain:
@@ -118,7 +119,7 @@ class AdminFactoriesUseCase:
         latest = self.vault_repo.get_latest(chain=chain)
         self._ensure_can_create(latest.status if latest else None)
 
-        abi, bytecode = load_contract_from_out("VaultFactory.sol", "VaultFactory.json")
+        abi, bytecode = load_contract_from_out("vaults", "VaultFactory.json")
 
         res = self.txs.deploy(
             abi=abi,
