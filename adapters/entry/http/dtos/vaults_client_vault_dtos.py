@@ -108,3 +108,18 @@ class CreateClientVaultRequest(BaseModel):
     description: Optional[str] = Field(default=None, description="Human friendly description")
 
     config: VaultCreateConfigIn = Field(..., description="Vault config persisted under `config`")
+
+
+class RegisterClientVaultRequest(BaseModel):
+    vault_address: str
+    strategy_id: int
+
+    chain: str
+    dex: str
+    owner: str
+    par_token: str
+
+    name: str
+    description: Optional[str] = None
+
+    config: VaultCreateConfigIn

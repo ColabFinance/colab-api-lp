@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from adapters.entry.http.dtos.vault_status_dtos import (
     VaultStatusOut,
 )
-from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, TxRunResponse
+from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, RegisterClientVaultRequest, TxRunResponse
 from core.services.exceptions import TransactionRevertedError
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 
@@ -73,3 +73,34 @@ async def create_client_vault(
         ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to createClientVault: {exc}") from exc
+
+
+@router.post(
+    "/register-client-vault",
+    summary="Register an existing on-chain ClientVault into Mongo",
+)
+async def register_client_vault(
+    body: RegisterClientVaultRequest,
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        out = use_case.register_client_vault(
+            vault_address=body.vault_address,
+            strategy_id=body.strategy_id,
+            owner=body.owner,
+            chain=body.chain,
+            dex=body.dex,
+            par_token=body.par_token,
+            name=body.name,
+            description=body.description,
+            config_in=body.config,
+        )
+        return {
+            "alias": out["alias"],
+            "mongo_id": out["mongo_id"],
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
