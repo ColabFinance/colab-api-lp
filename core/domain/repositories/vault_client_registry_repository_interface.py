@@ -1,9 +1,7 @@
-# core/domain/repositories/vault_registry_repository_interface.py
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List, Optional
 
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 
@@ -20,7 +18,7 @@ class VaultRegistryRepositoryInterface(ABC):
     @abstractmethod
     def find_by_alias(self, alias: str) -> Optional[VaultRegistryEntity]:
         raise NotImplementedError
-    
+
     @abstractmethod
     def find_by_address(self, address: str) -> Optional[VaultRegistryEntity]:
         raise NotImplementedError
@@ -29,5 +27,20 @@ class VaultRegistryRepositoryInterface(ABC):
     def count_alias_prefix(self, *, chain: str, dex: str, owner_prefix: str, par_token: str) -> int:
         """
         Used to generate the incremental alias number.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_by_owner(
+        self,
+        *,
+        owner: str,
+        chain: Optional[str] = None,
+        dex: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> List[VaultRegistryEntity]:
+        """
+        List vault registry docs from Mongo by owner (and optional chain/dex).
         """
         raise NotImplementedError

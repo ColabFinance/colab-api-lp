@@ -400,3 +400,35 @@ class VaultClientVaultUseCase:
             "mongo_id": saved.id,
         }
         
+    def list_registry_by_owner(
+        self,
+        *,
+        owner: str,
+        chain: Optional[str] = None,
+        dex: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ):
+        if not Web3.is_address((owner or "").strip()):
+            raise ValueError("Invalid owner address")
+
+        chain_n = _norm_slug(chain) if chain else None
+        dex_n = _norm_slug(dex) if dex else None
+
+        limit_i = int(limit or 200)
+        offset_i = int(offset or 0)
+
+        if limit_i < 1:
+            limit_i = 1
+        if limit_i > 500:
+            limit_i = 500
+        if offset_i < 0:
+            offset_i = 0
+
+        return self.vault_registry_repo.list_by_owner(
+            owner=owner,
+            chain=chain_n,
+            dex=dex_n,
+            limit=limit_i,
+            offset=offset_i,
+        )

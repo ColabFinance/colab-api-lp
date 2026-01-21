@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.dtos.vault_status_dtos import (
     VaultStatusOut,
 )
-from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, RegisterClientVaultRequest, TxRunResponse
+from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, RegisterClientVaultRequest, TxRunResponse, VaultRegistryOut
 from core.services.exceptions import TransactionRevertedError
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 
@@ -104,3 +104,31 @@ async def register_client_vault(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+
+@router.get(
+    "/by-owner",
+    response_model=dict,
+    summary="List vaults from Mongo registry for an owner (db-only, no onchain scan)",
+)
+async def list_vaults_by_owner(
+    owner: str = Query(..., description="Owner wallet address"),
+    chain: str | None = Query(None, description="Optional: base|bnb"),
+    dex: str | None = Query(None, description="Optional: pancake|aerodrome|uniswap"),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        items = use_case.list_registry_by_owner(
+            owner=owner,
+            chain=chain,
+            dex=dex,
+            limit=limit,
+            offset=offset,
+        )
+        data = [VaultRegistryOut.model_validate(v.model_dump()) for v in (items or [])]
+        return {"ok": True, "message": "ok", "data": data}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list vaults: {exc}") from exc

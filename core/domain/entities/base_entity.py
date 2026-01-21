@@ -9,6 +9,14 @@ from pydantic import BaseModel, ConfigDict
 
 E = TypeVar("E", bound="MongoEntity")
 
+def _parse_iso_to_ms(s: str) -> Optional[int]:
+    try:
+        # aceita "2026-01-14T14:44:08.382145+00:00" e também "...Z"
+        s2 = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s2)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return None
 
 class MongoEntity(BaseModel):
     """
@@ -56,10 +64,32 @@ class MongoEntity(BaseModel):
             return None
 
         data = dict(doc)
-
         if "_id" in data:
             data["id"] = str(data.pop("_id"))
 
+        # --- normalize timestamps coming from older docs ---
+        ca = data.get("created_at")
+        if isinstance(ca, str):
+            # if created_at came as ISO, move to created_at_iso and also fill created_at (ms) if possible
+            if not data.get("created_at_iso"):
+                data["created_at_iso"] = ca
+            ms = _parse_iso_to_ms(ca)
+            if ms is not None:
+                data["created_at"] = ms
+            else:
+                # last resort: drop invalid type so validation passes
+                data.pop("created_at", None)
+
+        ua = data.get("updated_at")
+        if isinstance(ua, str):
+            if not data.get("updated_at_iso"):
+                data["updated_at_iso"] = ua
+            ms = _parse_iso_to_ms(ua)
+            if ms is not None:
+                data["updated_at"] = ms
+            else:
+                data.pop("updated_at", None)
+                
         # If someone stored ObjectId-like values in any field, Pydantic will coerce where possible.
         return cls.model_validate(data)
 

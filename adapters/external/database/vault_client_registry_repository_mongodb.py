@@ -1,12 +1,11 @@
-# adapters/external/database/vault_registry_repository_mongodb.py
-
 from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional, Set
 
 from pymongo.collection import Collection
+from web3 import Web3
 
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
@@ -18,6 +17,26 @@ def _now_ms() -> int:
 
 def _now_iso() -> str:
     return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _norm_slug(s: Optional[str]) -> Optional[str]:
+    if s is None:
+        return None
+    v = (s or "").strip().lower().replace(" ", "").replace("/", "-")
+    return v or None
+
+
+def _owner_variants(owner: str) -> List[str]:
+    o = (owner or "").strip()
+    if not o:
+        return []
+    vs: Set[str] = {o, o.lower()}
+    if Web3.is_address(o):
+        try:
+            vs.add(Web3.to_checksum_address(o))
+        except Exception:
+            pass
+    return list(vs)
 
 
 class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
@@ -38,7 +57,6 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
     def insert(self, entity: VaultRegistryEntity) -> VaultRegistryEntity:
         doc = entity.to_mongo()
 
-        # timestamps
         now_ms = _now_ms()
         now_iso = _now_iso()
 
@@ -55,17 +73,43 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
     def find_by_alias(self, alias: str) -> Optional[VaultRegistryEntity]:
         doc = self._col.find_one({"alias": alias})
         return VaultRegistryEntity.from_mongo(doc)
-    
+
     def find_by_address(self, address: str) -> Optional[VaultRegistryEntity]:
         doc = self._col.find_one({"address": address})
         return VaultRegistryEntity.from_mongo(doc)
 
     def count_alias_prefix(self, *, chain: str, dex: str, owner_prefix: str, par_token: str) -> int:
-        """
-        Count existing docs that match the alias prefix pattern.
-        We rely on regex anchored at beginning.
-        """
-        # pattern: {owner5}-{parToken}-{dex}-{chain}-{N}
-        # we count docs that start with that prefix (up to the last dash)
         prefix = f"{owner_prefix}-{par_token}-{dex}-{chain}-"
         return int(self._col.count_documents({"alias": {"$regex": f"^{prefix}"}}))
+
+    def list_by_owner(
+        self,
+        *,
+        owner: str,
+        chain: Optional[str] = None,
+        dex: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> List[VaultRegistryEntity]:
+        owner_keys = _owner_variants(owner)
+        if not owner_keys:
+            return []
+
+        q: dict = {"owner": {"$in": owner_keys}}
+
+        chain_n = _norm_slug(chain)
+        dex_n = _norm_slug(dex)
+
+        if chain_n:
+            q["chain"] = chain_n
+        if dex_n:
+            q["dex"] = dex_n
+
+        cur = (
+            self._col.find(q)
+            .sort("created_at", -1)
+            .skip(int(offset or 0))
+            .limit(int(limit or 200))
+        )
+        docs = list(cur)
+        return [VaultRegistryEntity.from_mongo(d) for d in docs if d]
