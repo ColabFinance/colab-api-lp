@@ -12,6 +12,7 @@ from adapters.entry.http.views.client_vault_view import router as vaults_client_
 from adapters.entry.http.views.admin.admin_view import router as admin_router
 from adapters.entry.http.views.contracts_address_view import router as contracts_router
 from adapters.entry.http.views.auto_rebalance_pancake_view import router as auto_rebalance_pancake_router
+from adapters.entry.http.views.dex_registry_view import router as dex_registry_router
 
 def init_mongo_indexes() -> None:
     """
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     )
         
     app.include_router(admin_router, prefix="/api")
+    app.include_router(dex_registry_router, prefix="/api")
     app.include_router(vaults_client_vault_router, prefix="/api")
     app.include_router(contracts_router, prefix="/api")
     app.include_router(auto_rebalance_pancake_router, prefix="/api")
