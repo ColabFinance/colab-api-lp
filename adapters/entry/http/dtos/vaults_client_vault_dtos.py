@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -48,12 +48,6 @@ class TxRunResponse(BaseModel):
         alias: Optional[str] = None,
         mongo_id: Optional[str] = None,
     ) -> "TxRunResponse":
-        """
-        Normalize TxService output shapes:
-        - dict (preferred)
-        - str tx_hash (legacy)
-        - None/unknown -> safe default
-        """
         if isinstance(tx_any, dict):
             tx = tx_any
         elif isinstance(tx_any, str) and tx_any.startswith("0x"):
@@ -95,12 +89,10 @@ class TxRunResponse(BaseModel):
 
 
 class CreateClientVaultRequest(BaseModel):
-    # onchain
     strategy_id: int = Field(..., ge=1)
     owner: str = Field(..., description="Owner address to create vault for (required)")
     gas_strategy: str = Field(default="buffered", description="default|buffered|aggressive")
 
-    # registry metadata
     chain: str = Field(..., description="ex: base")
     dex: str = Field(..., description="ex: pancake|aerodrome|uniswap")
     par_token: str = Field(..., description="Ex: WETH or CAKE or any symbol identifier used in alias")
@@ -123,3 +115,27 @@ class RegisterClientVaultRequest(BaseModel):
     description: Optional[str] = None
 
     config: VaultCreateConfigIn
+
+
+class VaultRegistryOut(BaseModel):
+    id: Optional[str] = None
+
+    dex: Optional[str] = None
+    address: str
+    alias: str
+    is_active: Optional[bool] = None
+
+    chain: Optional[str] = None
+    owner: Optional[str] = None
+    par_token: Optional[str] = None
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    strategy_id: Optional[int] = None
+
+    config: Optional[Dict[str, Any]] = None
+
+    created_at: Optional[int] = None
+    created_at_iso: Optional[str] = None
+    updated_at: Optional[int] = None
+    updated_at_iso: Optional[str] = None
