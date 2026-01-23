@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from adapters.entry.http.dtos.vault_status_dtos import (
-    VaultStatusOut,
+from adapters.entry.http.dtos.vault_status_dtos import VaultStatusOut
+from adapters.entry.http.dtos.vaults_client_vault_dtos import (
+    CreateClientVaultRequest,
+    RegisterClientVaultRequest,
+    TxRunResponse,
+    VaultRegistryOut,
+    DailyHarvestConfigUpdateRequest,
+    CompoundConfigUpdateRequest,
+    RewardSwapConfigUpdateRequest,
 )
-from adapters.entry.http.dtos.vaults_client_vault_dtos import CreateClientVaultRequest, RegisterClientVaultRequest, TxRunResponse, VaultRegistryOut
 from core.services.exceptions import TransactionRevertedError
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 
@@ -95,10 +101,7 @@ async def register_client_vault(
             description=body.description,
             config_in=body.config,
         )
-        return {
-            "alias": out["alias"],
-            "mongo_id": out["mongo_id"],
-        }
+        return {"alias": out["alias"], "mongo_id": out["mongo_id"]}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -132,3 +135,75 @@ async def list_vaults_by_owner(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to list vaults: {exc}") from exc
+
+
+@router.post(
+    "/{alias_or_address}/config/daily-harvest",
+    response_model=dict,
+    summary="Persist daily harvest config in Mongo (no onchain tx here)",
+)
+async def update_daily_harvest_config(
+    alias_or_address: str,
+    body: DailyHarvestConfigUpdateRequest,
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        updated = use_case.update_daily_harvest_config_in_registry(
+            alias_or_address=alias_or_address,
+            enabled=body.enabled,
+            cooldown_sec=body.cooldown_sec,
+        )
+        return {"ok": True, "message": "ok", "data": VaultRegistryOut.model_validate(updated.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update daily-harvest config: {exc}") from exc
+
+
+@router.post(
+    "/{alias_or_address}/config/compound",
+    response_model=dict,
+    summary="Persist compound config in Mongo (no onchain tx here)",
+)
+async def update_compound_config(
+    alias_or_address: str,
+    body: CompoundConfigUpdateRequest,
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        updated = use_case.update_compound_config_in_registry(
+            alias_or_address=alias_or_address,
+            enabled=body.enabled,
+            cooldown_sec=body.cooldown_sec,
+        )
+        return {"ok": True, "message": "ok", "data": VaultRegistryOut.model_validate(updated.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update compound config: {exc}") from exc
+
+
+@router.post(
+    "/{alias_or_address}/config/reward-swap",
+    response_model=dict,
+    summary="Persist reward swap config in Mongo (no onchain tx here)",
+)
+async def update_reward_swap_config(
+    alias_or_address: str,
+    body: RewardSwapConfigUpdateRequest,
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        updated = use_case.update_reward_swap_config_in_registry(
+            alias_or_address=alias_or_address,
+            enabled=body.enabled,
+            token_in=body.token_in,
+            token_out=body.token_out,
+            fee=body.fee,
+            sqrt_price_limit_x96=body.sqrt_price_limit_x96,
+        )
+        return {"ok": True, "message": "ok", "data": VaultRegistryOut.model_validate(updated.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update reward-swap config: {exc}") from exc
