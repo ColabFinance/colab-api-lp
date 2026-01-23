@@ -15,6 +15,7 @@ from adapters.entry.http.views.auto_rebalance_pancake_view import router as auto
 from adapters.entry.http.views.dex_registry_view import router as dex_registry_router
 from adapters.entry.http.views.auto_harvest_compound_pancake_view import router as harvest_compound_pancake_router
 from adapters.entry.http.views.admin.admin_protocol_fee_collector_view import router as protocol_fee_collector_router
+from adapters.entry.http.views.admin.admin_vault_fee_buffer_view import router as admin_vault_fee_buffer_router
 
 def init_mongo_indexes() -> None:
     """
@@ -72,8 +73,9 @@ def create_app() -> FastAPI:
     app.include_router(vaults_client_vault_router, prefix="/api")
     app.include_router(contracts_router, prefix="/api")
     app.include_router(auto_rebalance_pancake_router, prefix="/api")
-    app.include_router(harvest_compound_pancake_router)
-    app.include_router(protocol_fee_collector_router)
+    app.include_router(harvest_compound_pancake_router, prefix="/api")
+    app.include_router(protocol_fee_collector_router, prefix="/api")
+    app.include_router(admin_vault_fee_buffer_router, prefix="/api")
     
     return app
 
