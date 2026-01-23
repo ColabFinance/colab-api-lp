@@ -432,3 +432,59 @@ class VaultClientVaultUseCase:
             limit=limit_i,
             offset=offset_i,
         )
+
+    def update_daily_harvest_config_in_registry(
+        self,
+        *,
+        alias_or_address: str,
+        enabled: bool,
+        cooldown_sec: int,
+    ) -> VaultRegistryEntity:
+        vault_addr = self._resolve_vault_address(alias_or_address)
+
+        set_fields = {
+            "config.daily_harvest": {"enabled": bool(enabled), "cooldown_sec": int(cooldown_sec)},
+            "config.jobs.harvest_job.enabled": bool(enabled),
+        }
+        return self.vault_registry_repo.update_fields(address=vault_addr, set_fields=set_fields)
+
+    def update_compound_config_in_registry(
+        self,
+        *,
+        alias_or_address: str,
+        enabled: bool,
+        cooldown_sec: int,
+    ) -> VaultRegistryEntity:
+        vault_addr = self._resolve_vault_address(alias_or_address)
+
+        set_fields = {
+            "config.compound": {"enabled": bool(enabled), "cooldown_sec": int(cooldown_sec)},
+            "config.jobs.compound_job.enabled": bool(enabled),
+        }
+        return self.vault_registry_repo.update_fields(address=vault_addr, set_fields=set_fields)
+
+    def update_reward_swap_config_in_registry(
+        self,
+        *,
+        alias_or_address: str,
+        enabled: bool,
+        token_in: str,
+        token_out: str,
+        fee: int,
+        sqrt_price_limit_x96: str,
+    ) -> VaultRegistryEntity:
+        vault_addr = self._resolve_vault_address(alias_or_address)
+
+        rs = {
+            "enabled": bool(enabled),
+            "tokenIn": (token_in or "").strip(),
+            "tokenOut": (token_out or "").strip(),
+            "fee": int(fee or 0),
+            "sqrtPriceLimitX96": (sqrt_price_limit_x96 or "0").strip(),
+        }
+
+        set_fields = {
+            "config.reward_swap": rs,
+            "config.jobs.harvest_job.swap_rewards": bool(enabled),
+        }
+        return self.vault_registry_repo.update_fields(address=vault_addr, set_fields=set_fields)

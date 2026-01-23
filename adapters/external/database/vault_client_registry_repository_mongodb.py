@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict, Any
 
 from pymongo.collection import Collection
+from pymongo import ReturnDocument
 from web3 import Web3
 
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
@@ -46,11 +47,8 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
         self._col = col
 
     def ensure_indexes(self) -> None:
-        # alias must be unique
         self._col.create_index([("alias", 1)], unique=True, name="ux_alias")
         self._col.create_index([("address", 1)], unique=True, name="ux_address")
-
-        # helpful search indexes
         self._col.create_index([("chain", 1), ("dex", 1), ("owner", 1)], name="ix_chain_dex_owner")
         self._col.create_index([("created_at", -1)], name="ix_created_at_desc")
 
@@ -113,3 +111,26 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
         )
         docs = list(cur)
         return [VaultRegistryEntity.from_mongo(d) for d in docs if d]
+
+    def update_fields(self, *, address: str, set_fields: Dict[str, Any]) -> VaultRegistryEntity:
+        if not Web3.is_address((address or "").strip()):
+            raise ValueError("Invalid address for update_fields")
+
+        addr = Web3.to_checksum_address(address)
+
+        now_ms = _now_ms()
+        now_iso = _now_iso()
+
+        set_doc = dict(set_fields or {})
+        set_doc["updated_at"] = now_ms
+        set_doc["updated_at_iso"] = now_iso
+
+        updated = self._col.find_one_and_update(
+            {"address": addr},
+            {"$set": set_doc},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated:
+            raise ValueError("Vault not found for update")
+
+        return VaultRegistryEntity.from_mongo(updated)

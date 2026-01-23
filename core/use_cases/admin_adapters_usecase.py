@@ -77,6 +77,7 @@ class AdminAdaptersUseCase:
         pool: str,
         nfpm: str,
         gauge: str,
+        fee_buffer: str,
         token0: str,
         token1: str,
         pool_name: str,
@@ -103,7 +104,8 @@ class AdminAdaptersUseCase:
         pool = _require_nonzero("pool", pool)
         nfpm = _require_nonzero("nfpm", nfpm)
         gauge = _norm(gauge)  # may be zero
-
+        fee_buffer = _require_nonzero("fee_buffer", fee_buffer)
+        
         # Metadata
         token0 = _require_nonzero("token0", token0)
         token1 = _require_nonzero("token1", token1)
@@ -126,7 +128,7 @@ class AdminAdaptersUseCase:
         res = self.txs.deploy(
             abi=abi,
             bytecode=bytecode,
-            ctor_args=(pool, nfpm, gauge),
+            ctor_args=(pool, nfpm, gauge, fee_buffer),
             wait=True,
             gas_strategy=gas_strategy,
         )
@@ -143,6 +145,7 @@ class AdminAdaptersUseCase:
             pool=pool_l,
             nfpm=_norm_lower(nfpm),
             gauge=_norm_lower(gauge),
+            fee_buffer=_norm_lower(fee_buffer),
             token0=_norm_lower(token0),
             token1=_norm_lower(token1),
             pool_name=pool_name,
@@ -166,11 +169,12 @@ class AdminAdaptersUseCase:
             "pool": ent.pool,
             "nfpm": ent.nfpm,
             "gauge": ent.gauge,
+            "fee_buffer": ent.fee_buffer,
             "token0": ent.token0,
             "token1": ent.token1,
             "pool_name": ent.pool_name,
             "fee_bps": ent.fee_bps,
-            "status": ent.status.value,
+            "status": ent.status,
             "created_at": ent.created_at_iso,
             "created_by": ent.created_by,
         }
@@ -192,11 +196,12 @@ class AdminAdaptersUseCase:
                     "pool": e.pool,
                     "nfpm": e.nfpm,
                     "gauge": e.gauge,
+                    "fee_buffer": e.fee_buffer,
                     "token0": e.token0,
                     "token1": e.token1,
                     "pool_name": e.pool_name,
                     "fee_bps": e.fee_bps,
-                    "status": e.status.value,
+                    "status": e.status,
                     "created_at": e.created_at_iso,
                     "created_by": e.created_by,
                 }

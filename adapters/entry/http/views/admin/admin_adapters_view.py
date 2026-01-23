@@ -36,6 +36,7 @@ async def create_adapter(
             pool=body.pool,
             nfpm=body.nfpm,
             gauge=body.gauge,
+            fee_buffer=body.fee_buffer,
             token0=body.token0,
             token1=body.token1,
             pool_name=body.pool_name,

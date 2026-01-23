@@ -94,7 +94,7 @@ class AdminFactoriesUseCase:
         res["result"] = {
             "chain": ent.chain,
             "address": ent.address,
-            "status": ent.status.value,
+            "status": ent.status,
             "created_at": ent.created_at_iso,
         }
         return res
@@ -157,7 +157,7 @@ class AdminFactoriesUseCase:
         res["result"] = {
             "chain": ent.chain,
             "address": ent.address,
-            "status": ent.status.value,
+            "status": ent.status,
             "created_at": ent.created_at_iso,
         }
         return res

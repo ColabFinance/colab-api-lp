@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 
@@ -42,5 +42,12 @@ class VaultRegistryRepositoryInterface(ABC):
     ) -> List[VaultRegistryEntity]:
         """
         List vault registry docs from Mongo by owner (and optional chain/dex).
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_fields(self, *, address: str, set_fields: Dict[str, Any]) -> VaultRegistryEntity:
+        """
+        Apply $set updates to a vault doc (by address) and return the updated entity.
         """
         raise NotImplementedError

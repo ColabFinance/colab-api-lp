@@ -139,3 +139,22 @@ class VaultRegistryOut(BaseModel):
     created_at_iso: Optional[str] = None
     updated_at: Optional[int] = None
     updated_at_iso: Optional[str] = None
+
+
+class DailyHarvestConfigUpdateRequest(BaseModel):
+    enabled: bool = True
+    cooldown_sec: int = Field(..., ge=0, le=0xFFFFFFFF)
+
+
+class CompoundConfigUpdateRequest(BaseModel):
+    enabled: bool = True
+    cooldown_sec: int = Field(..., ge=0, le=0xFFFFFFFF)
+
+
+class RewardSwapConfigUpdateRequest(BaseModel):
+    enabled: bool = False
+    token_in: str = "0x0000000000000000000000000000000000000000"
+    token_out: str = "0x0000000000000000000000000000000000000000"
+    fee: int = Field(0, ge=0, le=0xFFFFFF)  # uint24
+    sqrt_price_limit_x96: str = "0"         # allow "0" or "0x..."
+    

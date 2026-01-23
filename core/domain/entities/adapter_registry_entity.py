@@ -33,7 +33,8 @@ class AdapterRegistryEntity(MongoEntity):
     pool: str
     nfpm: str
     gauge: str
-
+    fee_buffer: str
+    
     token0: str
     token1: str
     pool_name: str

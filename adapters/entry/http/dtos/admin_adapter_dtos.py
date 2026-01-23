@@ -27,7 +27,8 @@ class CreateAdapterRequest(BaseModel):
     pool: str
     nfpm: str
     gauge: str  # may be zero address
-
+    fee_buffer: str  # MUST be non-zero
+    
     # Mongo metadata (not part of the contract)
     token0: str
     token1: str
@@ -64,7 +65,8 @@ class AdapterRecordOut(BaseModel):
     pool: str
     nfpm: str
     gauge: str
-
+    fee_buffer: str
+    
     token0: str
     token1: str
     pool_name: str
