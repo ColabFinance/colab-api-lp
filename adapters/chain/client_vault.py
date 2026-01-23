@@ -5,6 +5,7 @@ from web3.contract import Contract
 from web3.contract.contract import ContractFunction
 
 from adapters.chain.artifacts import load_abi_from_out
+from core.domain.schemas.auto_harvest_daily_types import AutoHarvestDailyParams
 from core.domain.schemas.onchain_types import AutoRebalancePancakeParams
 
 
@@ -60,3 +61,10 @@ class ClientVaultAdapter:
         p["tokenIn"] = Web3.to_checksum_address(p["tokenIn"])
         p["tokenOut"] = Web3.to_checksum_address(p["tokenOut"])
         return self.contract.functions.autoRebalancePancake(p)
+
+    def fn_auto_harvest_and_compound_pancake(self, params: AutoHarvestDailyParams) -> ContractFunction:
+        """
+        Build a ContractFunction for ClientVault.autoHarvestAndCompoundPancake(params).
+        """
+        p = params.to_abi_dict()
+        return self.contract.functions.autoHarvestAndCompoundPancake(p)

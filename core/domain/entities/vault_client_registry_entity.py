@@ -1,5 +1,3 @@
-# core/domain/entities/vault_registry_entity.py
-
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -15,6 +13,52 @@ class SwapPoolRef(BaseModel):
     model_config = ConfigDict(extra="allow", use_enum_values=True)
 
 
+class HarvestJobConfig(BaseModel):
+    """
+    Optional defaults/config for harvest_job.
+    The scheduler/job runner can read this from vault_registry and call the endpoint accordingly.
+    """
+    enabled: bool = True
+    harvest_pool_fees: bool = True
+    harvest_rewards: bool = True
+
+    swap_rewards: bool = False
+    reward_amount_in: int = 0
+    reward_amount_out_min: int = 0
+    reward_sqrt_price_limit_x96: int = 0
+
+    gas_strategy: str = "buffered"
+
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+
+class CompoundJobConfig(BaseModel):
+    """
+    Optional defaults/config for compound_job.
+    The scheduler/job runner can read this from vault_registry and call the endpoint accordingly.
+    """
+    enabled: bool = True
+
+    compound0_desired: int = 0
+    compound1_desired: int = 0
+    compound0_min: int = 0
+    compound1_min: int = 0
+
+    gas_strategy: str = "buffered"
+
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+
+class VaultJobsConfig(BaseModel):
+    """
+    Container for job-related config stored inside vault_registry.
+    """
+    harvest_job: HarvestJobConfig = Field(default_factory=HarvestJobConfig)
+    compound_job: CompoundJobConfig = Field(default_factory=CompoundJobConfig)
+
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+
 class VaultConfig(BaseModel):
     address: str = Field(..., description="ClientVault deployed/created address")
     adapter: str
@@ -26,6 +70,8 @@ class VaultConfig(BaseModel):
     version: str
 
     swap_pools: Dict[str, SwapPoolRef] = Field(default_factory=dict)
+
+    jobs: VaultJobsConfig = Field(default_factory=VaultJobsConfig)
 
     model_config = ConfigDict(extra="allow", use_enum_values=True)
 
