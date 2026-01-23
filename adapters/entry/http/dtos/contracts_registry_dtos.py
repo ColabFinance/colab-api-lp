@@ -30,4 +30,7 @@ class ContractsRegistryOut(BaseModel):
     strategy_factory: FactoryPublicOut
     vault_factory: FactoryPublicOut
 
+    protocol_fee_collector: FactoryPublicOut
+    vault_fee_buffer: FactoryPublicOut
+    
     adapters: List[AdapterRegistryPublicOut]

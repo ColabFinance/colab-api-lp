@@ -20,9 +20,11 @@ async def get_contracts_registry(
     """
     Returns the active on-chain contract addresses for a given chain.
 
-    This endpoint is intended for frontend bootstrapping:
+    Intended for frontend bootstrapping:
       - strategy factory (ACTIVE)
       - vault factory (ACTIVE)
+      - protocol fee collector (ACTIVE)
+      - vault fee buffer (ACTIVE)
       - adapters (ACTIVE)
     """
     try:
