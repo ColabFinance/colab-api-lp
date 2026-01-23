@@ -15,7 +15,7 @@ from adapters.chain.vault_factory import VaultFactoryAdapter
 from adapters.external.database.mongo_client import get_mongo_db
 from adapters.external.database.vault_client_registry_repository_mongodb import VaultRegistryRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.vault_client_registry_entity import SwapPoolRef, VaultConfig, VaultRegistryEntity
+from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
 
 from core.domain.schemas.vault_inputs import VaultCreateConfigIn
