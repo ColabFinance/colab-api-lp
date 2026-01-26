@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from adapters.entry.http.dtos.auto_rebalance_pancake_dtos import AutoRebalancePancakeRequest
 from adapters.entry.http.dtos.vaults_client_vault_dtos import TxRunResponse
@@ -23,7 +24,8 @@ async def auto_rebalance_pancake(
     use_case: AutoRebalancePancakeUseCase = Depends(get_use_case),
 ):
     try:
-        out = use_case.auto_rebalance_pancake(
+        out = await run_in_threadpool(
+            use_case.auto_rebalance_pancake,
             alias=alias,
             lower_tick=body.lower_tick,
             upper_tick=body.upper_tick,
