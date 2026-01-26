@@ -12,16 +12,23 @@ from web3.exceptions import ContractLogicError, BadFunctionCallOutput
 from adapters.chain.client_vault import ClientVaultAdapter
 from adapters.chain.strategy_registry import StrategyRegistryAdapter
 from adapters.chain.vault_factory import VaultFactoryAdapter
+from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
+from adapters.external.database.dex_pool_repository_mongodb import DexPoolRepositoryMongoDB
+from adapters.external.database.dex_registry_repository_mongodb import DexRegistryRepositoryMongoDB
 from adapters.external.database.mongo_client import get_mongo_db
 from adapters.external.database.vault_client_registry_repository_mongodb import VaultRegistryRepositoryMongoDB
 from config import get_settings
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
+from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
+from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
+from core.domain.repositories.dex_registry_repository_interface import DexRegistryRepository
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
 
 from core.domain.schemas.vault_inputs import VaultCreateConfigIn
 from core.services.tx_service import TxService
 from core.services.utils import to_json_safe
-from core.services.vault_status_service import VaultStatusService
+from core.services.vault_status_service import ZERO_ADDR, VaultStatusService
+from core.services.web3_cache import get_web3
 
 def _is_address_like(s: str) -> bool:
     return isinstance(s, str) and s.startswith("0x") and len(s) == 42
@@ -38,6 +45,14 @@ def _norm_slug(s: str) -> str:
     return (s or "").strip().lower().replace(" ", "").replace("/","-")
 
 
+def _try_get(obj: Any, key: str, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 @dataclass
 class VaultClientVaultUseCase:
     """
@@ -52,28 +67,24 @@ class VaultClientVaultUseCase:
     - Insert into vault_registry collection using entity + repo
     """
 
-    w3: Web3
-    registry: StrategyRegistryAdapter
-    factory: VaultFactoryAdapter
-    txs: TxService
-    status_svc: VaultStatusService
     vault_registry_repo: VaultRegistryRepositoryInterface
+    adapter_registry_repo: AdapterRegistryRepository
+    dex_pool_repo: DexPoolRepository
+    dex_registry_repo: DexRegistryRepository
 
     @classmethod
     def from_settings(cls) -> "VaultClientVaultUseCase":
-        s = get_settings()
-        w3 = Web3(Web3.HTTPProvider(s.RPC_URL_DEFAULT))
-        registry = StrategyRegistryAdapter(w3=w3, address=s.STRATEGY_REGISTRY_ADDRESS)
-        factory = VaultFactoryAdapter(w3=w3, address=s.VAULT_FACTORY_ADDRESS)
-        status_svc = VaultStatusService(w3=w3)
-        txs = TxService(s.RPC_URL_DEFAULT)
-
         db = get_mongo_db()
-        repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
-        repo.ensure_indexes()
-
-        return cls(w3=w3, registry=registry, factory=factory, txs=txs, status_svc=status_svc, vault_registry_repo=repo)
-
+        vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
+        adapter_repo = AdapterRegistryRepositoryMongoDB()
+        dex_pool_repo = DexPoolRepositoryMongoDB()
+        dex_registry_repo = DexRegistryRepositoryMongoDB()
+        return cls(
+            vault_registry_repo=vault_repo,
+            adapter_registry_repo=adapter_repo,
+            dex_pool_repo=dex_pool_repo,
+            dex_registry_repo=dex_registry_repo,
+        )
     # ---------- internal normalization ----------
 
     def _normalize_tx_result(self, tx_any: Any) -> Dict[str, Any]:
@@ -283,27 +294,114 @@ class VaultClientVaultUseCase:
                 alias_or_address = vault.config.address
                 return Web3.to_checksum_address(alias_or_address)
         raise ValueError("Unknown vault alias/address (send the vault address in the path)")
-
+    
     # -------- reads --------
 
-    def get_status(self, *, alias_or_address: str) -> Dict[str, Any]:
-        vault_addr = self._resolve_vault_address(alias_or_address)
+    def get_status(
+        self,
+        *,
+        alias_or_address: str,
+        debug_timing: bool = False,
+        fresh_onchain: bool = False,
+    ) -> Dict[str, Any]:
+        key = (alias_or_address or "").strip()
+        if not key:
+            raise ValueError("alias_or_address is required")
 
-        reg = None
-        if _is_address_like(alias_or_address):
-            reg = self.vault_registry_repo.find_by_address(Web3.to_checksum_address(alias_or_address))
+        # ---- vault_registry ----
+        if _is_address_like(key):
+            try:
+                addr = Web3.to_checksum_address(key)
+            except Exception:
+                raise ValueError("Invalid vault address")
+            v = self.vault_registry_repo.find_by_address(addr)
         else:
-            reg = self.vault_registry_repo.find_by_alias(alias_or_address)
+            v = self.vault_registry_repo.find_by_alias(key)
 
-        dex = (reg.dex if reg else "")
-        swap_pools = (reg.config.swap_pools if (reg and reg.config and reg.config.swap_pools) else {})
+        if not v:
+            raise ValueError("Vault not found in vault_registry")
 
-        return self.status_svc.compute(
-            vault_address=vault_addr,
+        chain = (v.chain or "").strip().lower()
+        dex = (v.dex or "").strip().lower()
+
+        cfg = v.config
+        vault_address = Web3.to_checksum_address(v.address)
+        rpc_url = (cfg.rpc_url or "").strip()
+        if not rpc_url:
+            raise ValueError("vault_registry.config.rpc_url is missing")
+
+        # ---- fetch wiring mostly from Mongo ----
+        adapter_addr = Web3.to_checksum_address(cfg.adapter)
+        pool_addr = Web3.to_checksum_address(cfg.pool)
+        nfpm_addr = Web3.to_checksum_address(cfg.nfpm)
+        gauge_addr = Web3.to_checksum_address(cfg.gauge) if cfg.gauge else ZERO_ADDR
+
+        token0_addr: Optional[str] = None
+        token1_addr: Optional[str] = None
+
+        # Prefer adapter_registry by adapter address (has tokens and full wiring)
+        ar = self.adapter_registry_repo.get_by_address(address=adapter_addr)
+        if ar:
+            try:
+                pool_addr = Web3.to_checksum_address(ar.pool)
+                nfpm_addr = Web3.to_checksum_address(ar.nfpm)
+                gauge_addr = Web3.to_checksum_address(ar.gauge) if ar.gauge else ZERO_ADDR
+                token0_addr = Web3.to_checksum_address(ar.token0)
+                token1_addr = Web3.to_checksum_address(ar.token1)
+            except Exception:
+                pass
+        else:
+            # Fallback: dex_pools by (chain,dex,pool)
+            dp = self.dex_pool_repo.get_by_pool(chain=chain, dex=dex, pool=pool_addr)
+            if dp:
+                try:
+                    nfpm_addr = Web3.to_checksum_address(dp.nfpm)
+                    gauge_addr = Web3.to_checksum_address(dp.gauge) if dp.gauge else ZERO_ADDR
+                    token0_addr = Web3.to_checksum_address(dp.token0)
+                    token1_addr = Web3.to_checksum_address(dp.token1)
+                except Exception:
+                    pass
+
+        # dex_router from dex_registries (global wiring per dex)
+        dex_router = None
+        dr = self.dex_registry_repo.get_by_key(chain=chain, dex=dex)
+        if dr:
+            try:
+                dex_router = Web3.to_checksum_address(dr.dex_router)
+            except Exception:
+                dex_router = dr.dex_router
+
+        # strategy_id from vault_registry (already stored)
+        strategy_id = int(v.strategy_id)
+
+        static: Dict[str, Any] = {
+            "chain": chain,
+            "dex": dex,
+            "vault": vault_address,
+            "owner": v.owner,  # stored in vault_registry
+            "adapter": adapter_addr,
+            "pool": pool_addr,
+            "nfpm": nfpm_addr,
+            "gauge": gauge_addr,
+            "token0": token0_addr,  # may be None if missing in db
+            "token1": token1_addr,  # may be None if missing in db
+            "dex_router": dex_router,  # may be None if missing in db
+            "strategy_id": strategy_id,
+        }
+
+        swap_pools = cfg.swap_pools or {}
+
+        w3 = get_web3(rpc_url)
+        svc = VaultStatusService(w3=w3)
+
+        return svc.compute(
+            vault_address=vault_address,
             dex=dex,
             swap_pools=swap_pools,
+            static=static,
+            debug_timing=debug_timing,
+            fresh_onchain=fresh_onchain,
         )
-
 
     def register_client_vault(
         self,

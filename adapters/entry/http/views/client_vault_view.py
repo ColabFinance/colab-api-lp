@@ -1,3 +1,4 @@
+from time import perf_counter
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.dtos.vault_status_dtos import VaultStatusOut
@@ -25,14 +26,33 @@ def get_use_case() -> VaultClientVaultUseCase:
     response_model=VaultStatusOut,
     summary="Read-only full status for a given vault (accepts address in {alias_or_address})",
 )
-async def get_status(alias_or_address: str, use_case: VaultClientVaultUseCase = Depends(get_use_case)):
+async def get_status(
+    alias_or_address: str,
+    debug_timing: bool = Query(False, description="Print per-step timings on server logs"),
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    t0 = perf_counter()
     try:
-        res = use_case.get_status(alias_or_address=alias_or_address)
+        res = use_case.get_status(alias_or_address=alias_or_address, debug_timing=debug_timing)
+        total_ms = (perf_counter() - t0) * 1000.0
+
+        if debug_timing:
+            print(f"[vault_status] total_ms={total_ms:.2f} vault={alias_or_address}")
+            tm = res.get("_timings_ms")
+            if isinstance(tm, dict):
+                for k, v in tm.items():
+                    try:
+                        print(f"  - {k}: {float(v):.2f}ms")
+                    except Exception:
+                        print(f"  - {k}: {v}")
+
         return VaultStatusOut(**res)
+
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to get vault status: {exc}") from exc
+
 
 
 @router.post(
