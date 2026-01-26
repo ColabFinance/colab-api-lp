@@ -307,15 +307,6 @@ class AutoRebalancePancakeUseCase:
                 "range_used": RangeUsed(lower_tick=int(lower_tick), upper_tick=int(upper_tick)).model_dump(),
                 "fee_used": int(fee),
                 "range_debug": range_dbg.model_dump(),
-                "swap_resolved": {
-                    "token_in": tin,
-                    "token_out": tout,
-                    "dec_in": int(dec_in),
-                    "dec_out": int(dec_out),
-                    "amount_in_human": float(swap_amount_in or 0.0),
-                    "amount_out_min_human": float(swap_amount_out_min or 0.0),
-                    "amount_in_raw": int(amount_in_raw),
-                    "amount_out_min_raw": int(amount_out_min_raw),
-                },
+                "swap_resolved": swap_resolved
             }
         )
