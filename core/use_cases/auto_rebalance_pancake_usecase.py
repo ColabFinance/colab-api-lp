@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import ROUND_FLOOR, Decimal
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -77,6 +78,12 @@ def _ui_price_to_p_t1_t0(ui_price: float, sym0: str, sym1: str) -> float:
     if _is_usd(sym0):
         return 1.0 / float(ui_price)
     return float(ui_price)
+
+def _human_to_raw(amount_h: float, decimals: int) -> int:
+    if amount_h <= 0:
+        return 0
+    q = Decimal(10) ** int(decimals)
+    return int((Decimal(str(amount_h)) * q).to_integral_value(rounding=ROUND_FLOOR))
 
 
 @dataclass
@@ -204,22 +211,22 @@ class AutoRebalancePancakeUseCase:
         self,
         *,
         alias: str,
-        new_lower: Optional[int],
-        new_upper: Optional[int],
+        lower_tick: Optional[int],
+        upper_tick: Optional[int],
         lower_price: Optional[float],
         upper_price: Optional[float],
         fee: Optional[int],
         token_in: str,
         token_out: str,
-        swap_amount_in: int,
-        swap_amount_out_min: int,
+        swap_amount_in: float,
+        swap_amount_out_min: float,
         sqrt_price_limit_x96: int = 0,
         gas_strategy: str = "buffered",
     ) -> dict:
         ent = self._get_vault_by_alias(alias)
 
         dex = (ent.dex or "").strip().lower()
-        if dex != "pancake":
+        if dex != "pancake_v3":
             raise ValueError(f"Vault dex mismatch. expected=pancake got={dex}")
 
         vault_addr = (ent.config.address or "").strip()
@@ -230,21 +237,38 @@ class AutoRebalancePancakeUseCase:
         if not (isinstance(pool_addr, str) and pool_addr.startswith("0x") and len(pool_addr) == 42):
             raise ValueError("Pool address not found in registry config.pool (required for price->tick and fee inference)")
 
+        meta = self._pool_meta(pool_addr)
+        
+        t0 = Web3.to_checksum_address(meta.token0)
+        t1 = Web3.to_checksum_address(meta.token1)
+        tin = Web3.to_checksum_address(token_in)
+        tout = Web3.to_checksum_address(token_out)
+        
+        if not ((tin == t0 and tout == t1) or (tin == t1 and tout == t0)):
+            raise ValueError(f"tokens mismatch: pool({t0},{t1}) req({tin},{tout})")
+        
+        dec_in = meta.dec0 if tin == t0 else meta.dec1
+        dec_out = meta.dec1 if tout == t1 else meta.dec0
+
         lower_tick, upper_tick, range_dbg = self._resolve_range_ticks(
             pool_addr=pool_addr,
-            new_lower=new_lower,
-            new_upper=new_upper,
+            new_lower=lower_tick,
+            new_upper=upper_tick,
             lower_price=lower_price,
             upper_price=upper_price,
         )
 
         # infer fee from pool if missing
         if fee is None:
-            fee = int(self._pool_meta(pool_addr).fee)
+            fee = int(meta.fee)
 
         if swap_amount_in > 0 and (fee is None or int(fee) <= 0):
             raise ValueError("fee is required (or inferable) when swap_amount_in > 0")
 
+        # converter HUMAN -> RAW
+        amount_in_raw = _human_to_raw(float(swap_amount_in or 0.0), int(dec_in))
+        amount_out_min_raw = _human_to_raw(float(swap_amount_out_min or 0.0), int(dec_out))
+        
         params = AutoRebalancePancakeParams(
             **{
                 "newLower": int(lower_tick),
@@ -252,15 +276,26 @@ class AutoRebalancePancakeUseCase:
                 "fee": int(fee),
                 "tokenIn": token_in,
                 "tokenOut": token_out,
-                "swapAmountIn": int(swap_amount_in),
-                "swapAmountOutMin": int(swap_amount_out_min),
+                "swapAmountIn": int(amount_in_raw),
+                "swapAmountOutMin": int(amount_out_min_raw),
                 "sqrtPriceLimitX96": int(sqrt_price_limit_x96 or 0),
             }
         )
 
         cv = ClientVaultAdapter(w3=self.w3, address=vault_addr)
         fn = cv.fn_auto_rebalance_pancake(params)
-
+        
+        swap_resolved = {
+                    "token_in": tin,
+                    "token_out": tout,
+                    "dec_in": int(dec_in),
+                    "dec_out": int(dec_out),
+                    "amount_in_human": float(swap_amount_in or 0.0),
+                    "amount_out_min_human": float(swap_amount_out_min or 0.0),
+                    "amount_in_raw": int(amount_in_raw),
+                    "amount_out_min_raw": int(amount_out_min_raw),
+                }
+        
         tx_any = self.txs.send(fn, wait=True, gas_strategy=gas_strategy)
 
         return to_json_safe(
@@ -272,5 +307,15 @@ class AutoRebalancePancakeUseCase:
                 "range_used": RangeUsed(lower_tick=int(lower_tick), upper_tick=int(upper_tick)).model_dump(),
                 "fee_used": int(fee),
                 "range_debug": range_dbg.model_dump(),
+                "swap_resolved": {
+                    "token_in": tin,
+                    "token_out": tout,
+                    "dec_in": int(dec_in),
+                    "dec_out": int(dec_out),
+                    "amount_in_human": float(swap_amount_in or 0.0),
+                    "amount_out_min_human": float(swap_amount_out_min or 0.0),
+                    "amount_in_raw": int(amount_in_raw),
+                    "amount_out_min_raw": int(amount_out_min_raw),
+                },
             }
         )

@@ -51,7 +51,7 @@ class AutoHarvestCompoundPancakeUseCase:
 
     def _assert_pancake(self, ent: VaultRegistryEntity) -> None:
         dex = (ent.dex or "").strip().lower()
-        if dex != "pancake":
+        if dex != "pancake_v3":
             raise ValueError(f"Vault dex mismatch. expected=pancake got={dex}")
 
     def _rpc_url_for_vault(self, ent: VaultRegistryEntity) -> str:

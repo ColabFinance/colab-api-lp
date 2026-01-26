@@ -430,7 +430,7 @@ class VaultStatusService:
                 pending_usd_est: Optional[float] = None
 
                 # Pancake path: MasterChefV3 rewards in CAKE
-                if (dex or "").strip().lower() == "pancake":
+                if (dex or "").strip().lower() == "pancake_v3":
                     mc = self._pancake_masterchef(gauge)
                     pending_raw = int(mc.functions.pendingCake(int(token_id)).call())
                     reward_token_addr = Web3.to_checksum_address(mc.functions.CAKE().call())
