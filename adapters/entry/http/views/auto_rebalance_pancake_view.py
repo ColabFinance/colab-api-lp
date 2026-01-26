@@ -25,8 +25,8 @@ async def auto_rebalance_pancake(
     try:
         out = use_case.auto_rebalance_pancake(
             alias=alias,
-            new_lower=body.new_lower,
-            new_upper=body.new_upper,
+            lower_tick=body.lower_tick,
+            upper_tick=body.upper_tick,
             lower_price=body.lower_price,
             upper_price=body.upper_price,
             fee=body.fee,
