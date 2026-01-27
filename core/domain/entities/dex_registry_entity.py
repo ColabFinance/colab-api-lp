@@ -57,4 +57,6 @@ class DexPoolEntity(MongoEntity):
 
     status: DexRegistryStatus = DexRegistryStatus.ACTIVE
 
+    reward_token: str = "0x0000000000000000000000000000000000000000"
+    
     model_config = ConfigDict(extra="allow", use_enum_values=True)

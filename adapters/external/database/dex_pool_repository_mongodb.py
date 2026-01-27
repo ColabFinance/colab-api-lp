@@ -75,3 +75,7 @@ class DexPoolRepositoryMongoDB(DexPoolRepository):
             {"$set": {"adapter": adapter}},
         )
         return int(res.modified_count)
+
+    def get_by_pool_address(self, *, pool: str) -> Optional[DexPoolEntity]:
+        doc = self._collection.find_one({"pool": pool})
+        return DexPoolEntity.from_mongo(doc)
