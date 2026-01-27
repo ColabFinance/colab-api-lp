@@ -69,6 +69,8 @@ class VaultConfig(BaseModel):
     rpc_url: str
     version: str
 
+    reward_swap_pool: Optional[str] = None
+    
     swap_pools: Dict[str, SwapPoolRef] = Field(default_factory=dict)
 
     jobs: VaultJobsConfig = Field(default_factory=VaultJobsConfig)

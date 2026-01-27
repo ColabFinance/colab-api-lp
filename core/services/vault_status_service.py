@@ -218,6 +218,41 @@ ABI_V3_POOL_MIN = [
 
 # ----------------- helpers -----------------
 
+def _holdings_total_usd(
+    *,
+    token0_amt: float,
+    token1_amt: float,
+    sym0: str,
+    sym1: str,
+    addr0: str,
+    addr1: str,
+    current_block: Dict[str, float],
+) -> Optional[float]:
+    stable0 = _is_usd_symbol(sym0) or _is_stable_addr(addr0)
+    stable1 = _is_usd_symbol(sym1) or _is_stable_addr(addr1)
+
+    try:
+        p_t1_t0 = float(current_block["p_t1_t0"])  # token1 per token0
+        p_t0_t1 = float(current_block["p_t0_t1"])  # token0 per token1
+    except Exception:
+        return None
+
+    # ambos stable => soma nominal
+    if stable0 and stable1:
+        return float(token0_amt + token1_amt)
+
+    # token1 é USD => token0 em USD via p_t1_t0
+    if stable1 and not stable0:
+        return float(token0_amt * p_t1_t0 + token1_amt)
+
+    # token0 é USD => token1 em USD via p_t0_t1
+    if stable0 and not stable1:
+        return float(token1_amt * p_t0_t1 + token0_amt)
+
+    # nenhum stable => sem âncora USD
+    return None
+
+
 def _is_usd_symbol(sym: str) -> bool:
     return (sym or "").upper() in USD_SYMBOLS
 
@@ -530,7 +565,7 @@ class VaultStatusService:
         self,
         *,
         chain: str,
-        swap_pools: Dict[str, Any],
+        reward_swap_pool: str,
         pending_amount: float,
         reward_token_addr: str,
         timings: Dict[str, float],
@@ -540,15 +575,7 @@ class VaultStatusService:
         if pending_amount <= 0:
             return 0.0
 
-        ref = swap_pools.get("CAKE_USDC") or swap_pools.get("cake_usdc")
-        pool_addr = None
-        if ref is not None:
-            pool_addr = getattr(ref, "pool", None) or (ref.get("pool") if isinstance(ref, dict) else None)
-
-        if not pool_addr:
-            return None
-
-        pool_addr = Web3.to_checksum_address(pool_addr)
+        pool_addr = Web3.to_checksum_address(reward_swap_pool)
 
         # pool meta (token0/token1) cached 24h
         meta = self._get_v3_pool_meta_cached(chain=chain, pool_addr=pool_addr, fresh_onchain=fresh_onchain)
@@ -622,12 +649,11 @@ class VaultStatusService:
         self,
         vault_address: str,
         dex: str = "",
-        swap_pools: Optional[Dict[str, Any]] = None,
+        reward_swap_pool: Optional[str] = None,
         static: Optional[Dict[str, Any]] = None,
         debug_timing: bool = False,
         fresh_onchain: bool = False,
     ) -> Dict[str, Any]:
-        swap_pools = swap_pools or {}
         timings: Dict[str, float] = {}
 
         def mark(name: str, t_start: float) -> None:
@@ -897,6 +923,37 @@ class VaultStatusService:
         current_block = _prices_from_tick(tick, dec0, dec1)
         lower_block = _prices_from_tick(lower_tick, dec0, dec1) if position_token_id else current_block
         upper_block = _prices_from_tick(upper_tick, dec0, dec1) if position_token_id else current_block
+        
+        vault_idle_usd = _holdings_total_usd(
+            token0_amt=float(vault_idle0),
+            token1_amt=float(vault_idle1),
+            sym0=str(sym0),
+            sym1=str(sym1),
+            addr0=Web3.to_checksum_address(token0_addr),
+            addr1=Web3.to_checksum_address(token1_addr),
+            current_block=current_block,
+        )
+
+        inpos_usd = _holdings_total_usd(
+            token0_amt=float(inpos0),
+            token1_amt=float(inpos1),
+            sym0=str(sym0),
+            sym1=str(sym1),
+            addr0=Web3.to_checksum_address(token0_addr),
+            addr1=Web3.to_checksum_address(token1_addr),
+            current_block=current_block,
+        )
+
+        totals_usd = _holdings_total_usd(
+            token0_amt=float(totals0),
+            token1_amt=float(totals1),
+            sym0=str(sym0),
+            sym1=str(sym1),
+            addr0=Web3.to_checksum_address(token0_addr),
+            addr1=Web3.to_checksum_address(token1_addr),
+            current_block=current_block,
+        )
+
         mark("prices_calc", t)
 
         # ---------- range flags ----------
@@ -976,7 +1033,7 @@ class VaultStatusService:
                             self._set_pancake_reward_token_cached(chain=chain, gauge=gauge, reward=reward_token_addr)
                     else:
                         reward_token_addr = _to_checksum(cached_reward)
-
+                    
                     if debug_timing:
                         timings["gauge_pancake_pending_and_token"] = (perf_counter() - t2) * 1000.0
 
@@ -997,17 +1054,18 @@ class VaultStatusService:
                         pending_usd_est = float(pending_h)
                     else:
                         t2 = perf_counter()
-                        pending_usd_est = self._pancake_reward_usd_est_cached(
-                            chain=chain,
-                            swap_pools=swap_pools,
-                            pending_amount=pending_h,
-                            reward_token_addr=reward_token_addr,
-                            timings=timings,
-                            debug_timing=debug_timing,
-                            fresh_onchain=fresh_onchain,
-                        )
-                        if debug_timing:
-                            timings["gauge_reward_usd_est"] = (perf_counter() - t2) * 1000.0
+                        if reward_swap_pool:
+                            pending_usd_est = self._pancake_reward_usd_est_cached(
+                                chain=chain,
+                                reward_swap_pool=reward_swap_pool,
+                                pending_amount=pending_h,
+                                reward_token_addr=reward_token_addr,
+                                timings=timings,
+                                debug_timing=debug_timing,
+                                fresh_onchain=fresh_onchain,
+                            )
+                            if debug_timing:
+                                timings["gauge_reward_usd_est"] = (perf_counter() - t2) * 1000.0
 
                 else:
                     g = self._gauge_generic(gauge)
@@ -1123,9 +1181,21 @@ class VaultStatusService:
             range_side=str(range_side),
 
             holdings=HoldingsOut(
-                vault_idle=HoldingsBlock(token0=float(vault_idle0), token1=float(vault_idle1)),
-                in_position=HoldingsBlock(token0=float(inpos0), token1=float(inpos1)),
-                totals=HoldingsBlock(token0=float(totals0), token1=float(totals1)),
+                vault_idle=HoldingsBlock(
+                    token0=float(vault_idle0),
+                    token1=float(vault_idle1),
+                    total_usd=(float(vault_idle_usd) if vault_idle_usd is not None else None),
+                ),
+                in_position=HoldingsBlock(
+                    token0=float(inpos0),
+                    token1=float(inpos1),
+                    total_usd=(float(inpos_usd) if inpos_usd is not None else None),
+                ),
+                totals=HoldingsBlock(
+                    token0=float(totals0),
+                    token1=float(totals1),
+                    total_usd=(float(totals_usd) if totals_usd is not None else None),
+                ),
                 symbols={"token0": str(sym0), "token1": str(sym1)},
                 addresses={"token0": Web3.to_checksum_address(token0_addr), "token1": Web3.to_checksum_address(token1_addr)},
             ),

@@ -23,6 +23,7 @@ class PricesPanelOut(BaseModel):
 class HoldingsSideOut(BaseModel):
     token0: float
     token1: float
+    total_usd: Optional[float] = None
 
 
 class HoldingsOut(BaseModel):
