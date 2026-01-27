@@ -260,7 +260,6 @@ class VaultClientVaultUseCase:
                 try:
                     decoded = ev().process_receipt(receipt)
                     if decoded:
-                        print("decoded", decoded)
                         args = decoded[0].get("args") or {}
                         # common arg keys
                         for k in ("vault", "clientVault", "vaultAddress", "addr"):
@@ -275,7 +274,6 @@ class VaultClientVaultUseCase:
         # 2) weak fallback: scan log 'address' fields (contract emitting logs)
         # (not ideal, but sometimes factory emits with vault address as log.address)
         for lg in logs:
-            print("lg",lg)
             addr = lg.get("address")
             if _is_address_like(addr):
                 # This will often be the factory address, not the vault. So only accept if different.
@@ -389,7 +387,7 @@ class VaultClientVaultUseCase:
             "strategy_id": strategy_id,
         }
 
-        swap_pools = cfg.swap_pools or {}
+        reward_swap_pool = cfg.reward_swap_pool
 
         w3 = get_web3(rpc_url)
         svc = VaultStatusService(w3=w3)
@@ -397,7 +395,7 @@ class VaultClientVaultUseCase:
         return svc.compute(
             vault_address=vault_address,
             dex=dex,
-            swap_pools=swap_pools,
+            reward_swap_pool=reward_swap_pool,
             static=static,
             debug_timing=debug_timing,
             fresh_onchain=fresh_onchain,
@@ -429,8 +427,6 @@ class VaultClientVaultUseCase:
                 "alias": existing.alias,
                 "mongo_id": existing.id,
             }
-        
-        print("config_in",config_in)
         
         rpc_url = (getattr(config_in, "rpc_url", None) or "").strip()
         if not rpc_url:

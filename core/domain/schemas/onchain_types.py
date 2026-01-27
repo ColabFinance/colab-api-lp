@@ -81,6 +81,7 @@ class PricesOut(BaseModel):
 class HoldingsBlock(BaseModel):
     token0: float
     token1: float
+    total_usd: Optional[float] = None
 
 
 class HoldingsOut(BaseModel):
