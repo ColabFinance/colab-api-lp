@@ -32,3 +32,7 @@ class DexPoolRepository(ABC):
     @abstractmethod
     def ensure_indexes(self) -> None:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_by_pool_address(self, *, pool: str) -> Optional[DexPoolEntity]:
+        raise NotImplementedError

@@ -91,8 +91,31 @@ class DexRegistryUseCase:
                 "fee_rate": r.fee_rate,
                 "adapter": r.adapter,
                 "status": r.status,
+                "reward_token": r.reward_token,
                 "created_at": r.created_at_iso,
             }
             for r in rows
         ]
+        return {"ok": True, "message": "OK", "data": data}
+
+    def get_pool_by_pool(self, *, pool: str) -> dict:
+        pool = _norm(pool)
+        if not pool:
+            raise ValueError("pool is required")
+
+        r = self.pool_repo.get_by_pool_address(pool=pool)
+        if not r:
+            return {"ok": False, "message": "Pool not found", "data": None}
+
+        data = {
+            "chain": r.chain,
+            "dex": r.dex,
+            "pool": r.pool,
+            "token0": r.token0,
+            "token1": r.token1,
+            "reward_token": getattr(r, "reward_token", "0x0000000000000000000000000000000000000000"),
+            "adapter": r.adapter,
+            "status": r.status,
+            "created_at": r.created_at_iso,
+        }
         return {"ok": True, "message": "OK", "data": data}

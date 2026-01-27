@@ -120,6 +120,7 @@ class AdminDexRegistryUseCase:
         pair: str = "",
         symbol: str = "",
         adapter: str | None = None,
+        reward_token: str,
         status: DexRegistryStatus = DexRegistryStatus.ACTIVE,
     ) -> dict:
         chain = _norm_lower(chain)
@@ -154,6 +155,7 @@ class AdminDexRegistryUseCase:
             fee_rate=fee_rate,
             adapter=adapter,
             status=status,
+            reward_token=reward_token
         )
         self.pool_repo.insert(ent)
 
@@ -173,6 +175,7 @@ class AdminDexRegistryUseCase:
                 "fee_bps": ent.fee_bps,
                 "fee_rate": ent.fee_rate,
                 "adapter": ent.adapter,
+                "reward_token": ent.reward_token,
                 "status": ent.status,
                 "created_at": ent.created_at_iso,
             },
@@ -202,6 +205,7 @@ class AdminDexRegistryUseCase:
                 "fee_rate": r.fee_rate,
                 "adapter": r.adapter,
                 "status": r.status,
+                "reward_token": r.reward_token,
                 "created_at": r.created_at_iso,
             }
             for r in rows

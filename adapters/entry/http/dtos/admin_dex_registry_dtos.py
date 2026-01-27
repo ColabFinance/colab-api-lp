@@ -62,6 +62,8 @@ class CreateDexPoolRequest(BaseModel):
     fee_bps: int = Field(..., ge=0, le=100_000)
 
     adapter: Optional[str] = Field(default=None, description="Optional deployed adapter address")
+    reward_token: str
+    
     status: DexRegistryStatus = Field(default=DexRegistryStatus.ACTIVE)
 
     @field_validator("chain", "dex")
