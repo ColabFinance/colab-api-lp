@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from typing import List, Optional, Protocol
+from core.domain.entities.vault_user_event_entity import VaultUserEventEntity
+
+
+class VaultUserEventsRepositoryInterface(Protocol):
+    def ensure_indexes(self) -> None: ...
+
+    def upsert_idempotent(self, entity: VaultUserEventEntity) -> VaultUserEventEntity: ...
+
+    def list_by_vault(self, *, vault: str, limit: int, offset: int) -> List[VaultUserEventEntity]: ...
+
+    def count_by_vault(self, *, vault: str) -> int: ...
+
+    def find_by_alias_or_address(self, alias_or_address: str) -> Optional[str]: ...
