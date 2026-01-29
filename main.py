@@ -17,6 +17,7 @@ from adapters.entry.http.views.auto_harvest_compound_pancake_view import router 
 from adapters.entry.http.views.admin.admin_protocol_fee_collector_view import router as protocol_fee_collector_router
 from adapters.entry.http.views.admin.admin_vault_fee_buffer_view import router as admin_vault_fee_buffer_router
 from adapters.entry.http.views.vault_user_events_view import router as vaults_user_events_router
+from adapters.entry.http.views.vault_performance_view import router as vault_performance_router
 
 def init_mongo_indexes() -> None:
     """
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(harvest_compound_pancake_router, prefix="/api")
     app.include_router(protocol_fee_collector_router, prefix="/api")
     app.include_router(admin_vault_fee_buffer_router, prefix="/api")
+    app.include_router(vault_performance_router, prefix="/api")
     
     return app
 
