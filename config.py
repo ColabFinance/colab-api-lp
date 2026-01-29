@@ -38,6 +38,8 @@ class Settings:
     PRIVY_JWKS_URL: str
     ADMIN_WALLETS: str 
 
+    API_SIGNALS_URL: str
+        
     # generic
     ENV: str = Field(default="dev")
     LOG_LEVEL: str = Field(default="INFO")
@@ -74,4 +76,6 @@ def get_settings() -> Settings:
         PRIVY_JWKS_URL=os.getenv("PRIVY_JWKS_URL", "https://auth.privy.io/api/v1/apps/jwks"),
         ADMIN_WALLETS=os.getenv("ADMIN_WALLETS", ""),
         PRIVY_APP_SECRET=os.getenv("PRIVY_APP_SECRET", ""),
+        
+        API_SIGNALS_URL=os.getenv("API_SIGNALS_URL", "http://172.17.0.1:8080"),
     )

@@ -9,6 +9,7 @@ from pymongo import ReturnDocument
 from web3 import Web3
 
 from core.domain.entities.vault_user_event_entity import VaultUserEventEntity
+from core.domain.repositories.vault_user_events_repository_interface import VaultUserEventsRepositoryInterface
 
 
 def _now_ms() -> int:
