@@ -11,7 +11,7 @@ router = APIRouter(prefix="/dexes", tags=["dex"])
 def get_use_case() -> DexRegistryUseCase:
     return DexRegistryUseCase.from_settings()
 
-@router.get("/")
+@router.get("")
 async def list_dex_registries(
     chain: str = Query(..., description='Chain key (e.g. "base", "bnb")'),
     limit: int = Query(200, ge=1, le=1000),
