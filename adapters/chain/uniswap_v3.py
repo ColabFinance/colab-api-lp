@@ -1,139 +1,24 @@
 from typing import Dict, Any, Tuple, Optional
 from web3 import Web3
+
+from adapters.chain.artifacts import load_abi_json, load_abi_from_out
 from .base import DexAdapter
 from adapters.chain.utils import get_sqrt_ratio_at_tick, get_amounts_for_liquidity
 
-# ---- minimal ABIs (same fragments you used in bot/chain.py) ----
-ABI_POOL = [
-    {"name":"slot0","outputs":[
-        {"type":"uint160","name":"sqrtPriceX96"},
-        {"type":"int24","name":"tick"},
-        {"type":"uint16"},{"type":"uint16"},{"type":"uint16"},{"type":"uint8"},{"type":"bool"}],
-     "inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"observe","outputs":[
-        {"type":"int56[]","name":"tickCumulatives"},
-        {"type":"uint160[]","name":"secondsPerLiquidityCumulativeX128"}],
-     "inputs":[{"type":"uint32[]","name":"secondsAgos"}],
-     "stateMutability":"view","type":"function"},
-    {"name":"token0","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"token1","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"fee","outputs":[{"type":"uint24"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"tickSpacing","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
-]
-ABI_ERC20 = [
-    {"name":"decimals","outputs":[{"type":"uint8"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"symbol","outputs":[{"type":"string"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"balanceOf","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"transfer","outputs":[{"type":"bool"}],"inputs":[{"type":"address"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-]
-ABI_NFPM = [
-    {"name":"positions","outputs":[
-        {"type":"uint96"}, {"type":"address"}, {"type":"address"}, {"type":"address"},
-        {"type":"uint24"}, {"type":"int24"}, {"type":"int24"}, {"type":"uint128"},
-        {"type":"uint256"}, {"type":"uint256"}, {"type":"uint128"}, {"type":"uint128"}],
-     "inputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},
-    {"name":"collect","outputs":[{"type":"uint256"},{"type":"uint256"}],
-     "inputs":[{"components":[
-        {"type":"uint256","name":"tokenId"},
-        {"type":"address","name":"recipient"},
-        {"type":"uint128","name":"amount0Max"},
-        {"type":"uint128","name":"amount1Max"}],
-       "type":"tuple","name":"params"}],
-     "stateMutability":"nonpayable","type":"function"},
-]
-
-ABI_VAULT = [
-    {"name":"pool","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"nfpm","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"gauge","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"adapter","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenIdView","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"positionTokenId","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"currentRange","outputs":[{"type":"int24"},{"type":"int24"},{"type":"uint128"}],
-     "inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"twapOk","outputs":[{"type":"bool"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"lastRebalance","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"minWidth","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"maxWidth","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"twapWindow","outputs":[{"type":"uint32"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"maxTwapDeviationTicks","outputs":[{"type":"int24"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"openInitialPosition","outputs":[],"inputs":[{"type":"int24"},{"type":"int24"}],"stateMutability":"nonpayable","type":"function"},
-    {"name":"rebalanceWithCaps","outputs":[],"inputs":[{"type":"int24"},{"type":"int24"},{"type":"uint256"},{"type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-    {"name":"exitPositionToVault","outputs":[],"inputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"name":"exitPositionAndWithdrawAll","outputs":[],"inputs":[{"type":"address"}],"stateMutability":"nonpayable","type":"function"},  # <-- address to    
-    {"name":"collectToVault","outputs":[],"inputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"name":"swapExactIn","outputs":[{"type":"uint256"}],"inputs":[
-        {"type":"address","name":"router"},
-        {"type":"address","name":"tokenIn"},
-        {"type":"address","name":"tokenOut"},
-        {"type":"uint24","name":"fee"},
-        {"type":"uint256","name":"amountIn"},
-        {"type":"uint256","name":"amountOutMinimum"},
-        {"type":"uint160","name":"sqrtPriceLimitX96"}
-    ],"stateMutability":"nonpayable","type":"function"},
-]
-
-# ABI mínimo do adapter (universal p/ Uni e Aerodrome)
-ABI_ADAPTER = [
-    {"name":"tokens","outputs":[{"type":"address"},{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"currentTokenId","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"currentRange","outputs":[{"type":"int24"},{"type":"int24"},{"type":"uint128"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"lastRebalance","outputs":[{"type":"uint256"}],"inputs":[{"type":"address"}],"stateMutability":"view","type":"function"},
-    {"name":"twapOk","outputs":[{"type":"bool"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"minCooldown","outputs":[{"type":"uint256"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"pool","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"nfpm","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-    {"name":"gauge","outputs":[{"type":"address"}],"inputs":[],"stateMutability":"view","type":"function"},
-]
-
-ABI_QUOTER_V2 = [
-    {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
-    {"inputs":[],"name":"WETH9","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-    {"inputs":[],"name":"factory","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-    {"inputs":[{"internalType":"bytes","name":"path","type":"bytes"},{"internalType":"uint256","name":"amountIn","type":"uint256"}],"name":"quoteExactInput","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"},{"internalType":"uint160[]","name":"sqrtPriceX96AfterList","type":"uint160[]"},{"internalType":"uint32[]","name":"initializedTicksCrossedList","type":"uint32[]"},{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-    {"inputs":[{"components":[
-        {"internalType":"address","name":"tokenIn","type":"address"},
-        {"internalType":"address","name":"tokenOut","type":"address"},
-        {"internalType":"uint256","name":"amountIn","type":"uint256"},
-        {"internalType":"uint24","name":"fee","type":"uint24"},
-        {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}
-    ],"internalType":"struct IQuoterV2.QuoteExactInputSingleParams","name":"params","type":"tuple"}],
-     "name":"quoteExactInputSingle",
-     "outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"},{"internalType":"uint160","name":"sqrtPriceX96After","type":"uint160"},{"internalType":"uint32","name":"initializedTicksCrossed","type":"uint32"},{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],
-     "stateMutability":"nonpayable","type":"function"},
-    {"inputs":[{"internalType":"bytes","name":"path","type":"bytes"},{"internalType":"uint256","name":"amountOut","type":"uint256"}],"name":"quoteExactOutput","outputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint160[]","name":"sqrtPriceX96AfterList","type":"uint160[]"},{"internalType":"uint32[]","name":"initializedTicksCrossedList","type":"uint32[]"},{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},
-    {"inputs":[{"components":[
-        {"internalType":"address","name":"tokenIn","type":"address"},
-        {"internalType":"address","name":"tokenOut","type":"address"},
-        {"internalType":"uint256","name":"amount","type":"uint256"},
-        {"internalType":"uint24","name":"fee","type":"uint24"},
-        {"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}
-    ],"internalType":"struct IQuoterV2.QuoteExactOutputSingleParams","name":"params","type":"tuple"}],
-     "name":"quoteExactOutputSingle",
-     "outputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint160","name":"sqrtPriceX96After","type":"uint160"},{"internalType":"uint32","name":"initializedTicksCrossed","type":"uint32"},{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],
-     "stateMutability":"nonpayable","type":"function"},
-    {"inputs":[{"internalType":"int256","name":"amount0Delta","type":"int256"},{"internalType":"int256","name":"amount1Delta","type":"int256"},{"internalType":"bytes","name":"path","type":"bytes"}],"name":"uniswapV3SwapCallback","outputs":[],"stateMutability":"view","type":"function"}
-]
 
 U128_MAX = (1<<128) - 1
 
 class UniswapV3Adapter(DexAdapter):
     """Concrete adapter for Uniswap v3 + SingleUserVault."""
 
-    def pool_abi(self) -> list: return ABI_POOL
-    def erc20_abi(self) -> list: return ABI_ERC20
-    def nfpm_abi(self) -> list:  return ABI_NFPM
-    def vault_abi(self) -> list: return ABI_VAULT
-    def quoter_abi(self) -> list: return ABI_QUOTER_V2
-    
     def pool_contract(self):
-        return self.w3.eth.contract(address=Web3.to_checksum_address(self.pool), abi=self.pool_abi())
+        return self.w3.eth.contract(address=Web3.to_checksum_address(self.pool), abi=load_abi_json("uniswap", "Pool.min.json"))
 
     def nfpm_contract(self):
-        return self.w3.eth.contract(address=Web3.to_checksum_address(self.nfpm), abi=self.nfpm_abi()) if self.nfpm else None
+        return self.w3.eth.contract(address=Web3.to_checksum_address(self.nfpm), abi=load_abi_json("uniswap", "NFPM.min.json")) if self.nfpm else None
 
     def quoter(self, addr: str):
-        return self.w3.eth.contract(address=Web3.to_checksum_address(addr), abi=self.quoter_abi())
+        return self.w3.eth.contract(address=Web3.to_checksum_address(addr), abi=load_abi_json("uniswap", "QuoterV2.min.json"))
     
     # ---------- reads ----------
     def slot0(self) -> Tuple[int,int]:
@@ -162,7 +47,7 @@ class UniswapV3Adapter(DexAdapter):
         adapter_addr = None
         try:
             # tentar ABI V2
-            v2 = self.w3.eth.contract(address=self.vault.address, abi=ABI_VAULT)
+            v2 = self.w3.eth.contract(address=self.vault.address, abi=load_abi_from_out("vaults", "ClientVault.json"))
             adapter_addr = v2.functions.adapter().call()
         except Exception:
             adapter_addr = None
@@ -175,7 +60,7 @@ class UniswapV3Adapter(DexAdapter):
         pool_addr = Web3.to_checksum_address(self.pool)
         
         if adapter_addr and int(adapter_addr, 16) != 0:
-            ac = self.w3.eth.contract(address=Web3.to_checksum_address(adapter_addr), abi=ABI_ADAPTER)
+            ac = self.w3.eth.contract(address=Web3.to_checksum_address(adapter_addr), abi=load_abi_from_out("vaults", "UniV3Adapter.json"))
             # tokenId (NFT está no adapter)
             try:
                 token_id = int(ac.functions.currentTokenId(self.vault.address).call())

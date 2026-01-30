@@ -4,15 +4,20 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from adapters.external.database.vault_events_repository import VaultEventsRepository
-from adapters.external.database.vault_registry_repository import VaultRegistryRepository
+from adapters.external.database.vault_events_repository_mongodb import VaultEventsRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
-from adapters.entry.http.view.vaults_registry import router as vaults_registry_router
-from adapters.entry.http.view.vaults_position import router as vaults_position_router
-from adapters.entry.http.view.vaults_swap import router as vaults_swap_router
-from adapters.entry.http.view.vaults_batch import router as vaults_batch_router
-
+from adapters.entry.http.views.client_vault_view import router as vaults_client_vault_router
+from adapters.entry.http.views.admin.admin_view import router as admin_router
+from adapters.entry.http.views.contracts_address_view import router as contracts_router
+from adapters.entry.http.views.auto_rebalance_pancake_view import router as auto_rebalance_pancake_router
+from adapters.entry.http.views.dex_registry_view import router as dex_registry_router
+from adapters.entry.http.views.auto_harvest_compound_pancake_view import router as harvest_compound_pancake_router
+from adapters.entry.http.views.admin.admin_protocol_fee_collector_view import router as protocol_fee_collector_router
+from adapters.entry.http.views.admin.admin_vault_fee_buffer_view import router as admin_vault_fee_buffer_router
+from adapters.entry.http.views.vault_user_events_view import router as vaults_user_events_router
+from adapters.entry.http.views.vault_performance_view import router as vault_performance_router
 
 def init_mongo_indexes() -> None:
     """
@@ -21,8 +26,6 @@ def init_mongo_indexes() -> None:
     This makes sure the application has the expected indexes for efficient
     queries and unique constraints before serving any request.
     """
-    # Vault registry: __init__ already ensures its own indexes
-    VaultRegistryRepository()
 
     # Vault state indexes
     state_repo = VaultStateRepository()
@@ -59,11 +62,25 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.include_router(vaults_registry_router, prefix="/api")
-    app.include_router(vaults_position_router, prefix="/api")
-    app.include_router(vaults_swap_router, prefix="/api")
-    app.include_router(vaults_batch_router, prefix="/api")
-
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+        
+    app.include_router(admin_router, prefix="/api")
+    app.include_router(dex_registry_router, prefix="/api")
+    app.include_router(vaults_client_vault_router, prefix="/api")
+    app.include_router(vaults_user_events_router, prefix="/api")
+    app.include_router(contracts_router, prefix="/api")
+    app.include_router(auto_rebalance_pancake_router, prefix="/api")
+    app.include_router(harvest_compound_pancake_router, prefix="/api")
+    app.include_router(protocol_fee_collector_router, prefix="/api")
+    app.include_router(admin_vault_fee_buffer_router, prefix="/api")
+    app.include_router(vault_performance_router, prefix="/api")
+    
     return app
 
 

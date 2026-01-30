@@ -29,6 +29,8 @@ services:
     volumes:
       - .:/app:delegated
     working_dir: /app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   mongo_data:
