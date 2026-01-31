@@ -21,6 +21,7 @@ class VaultUserEventTransfer(BaseModel):
     symbol: Optional[str] = None
     decimals: Optional[int] = None
 
+    price_usd: Optional[str] = Field(default=None, description="Decimal string (only for non-stables)")
 
 class VaultUserEventDepositIn(BaseModel):
     chain: str = Field(..., description="ex: base|bnb")
@@ -71,6 +72,8 @@ class VaultUserEventOut(BaseModel):
     amount_raw: Optional[str] = None
     decimals: Optional[int] = None
 
+    token_price_usd: Optional[str] = Field(default=None, description="Decimal string (only for non-stables)")
+        
     to: Optional[str] = None
     transfers: Optional[List[VaultUserEventTransfer]] = None
 

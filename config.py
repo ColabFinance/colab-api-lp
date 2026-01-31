@@ -39,7 +39,8 @@ class Settings:
     ADMIN_WALLETS: str 
 
     API_SIGNALS_URL: str
-        
+    API_MARKET_DATA_URL: str
+    
     # generic
     ENV: str = Field(default="dev")
     LOG_LEVEL: str = Field(default="INFO")
@@ -78,4 +79,5 @@ def get_settings() -> Settings:
         PRIVY_APP_SECRET=os.getenv("PRIVY_APP_SECRET", ""),
         
         API_SIGNALS_URL=os.getenv("API_SIGNALS_URL", "http://172.17.0.1:8080"),
+        API_MARKET_DATA_URL=os.getenv("API_MARKET_DATA_URL", "http://172.17.0.1:8081"),
     )
