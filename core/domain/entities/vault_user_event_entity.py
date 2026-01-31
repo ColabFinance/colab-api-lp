@@ -15,6 +15,8 @@ class VaultUserEventTransfer(BaseModel):
     symbol: Optional[str] = None
     decimals: Optional[int] = None
 
+    price_usd: Optional[str] = None
+        
     model_config = ConfigDict(populate_by_name=True, extra="allow", use_enum_values=True)
 
 
@@ -39,6 +41,8 @@ class VaultUserEventEntity(MongoEntity):
     amount_raw: Optional[str] = None
     decimals: Optional[int] = None
 
+    token_price_usd: Optional[str] = None
+    
     to: Optional[str] = None
     transfers: Optional[List[VaultUserEventTransfer]] = None
 

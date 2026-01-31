@@ -36,7 +36,7 @@ async def record_deposit(
     use_case: VaultUserEventsUseCase = Depends(get_use_case),
 ):
     try:
-        saved = use_case.record_deposit(
+        saved = await use_case.record_deposit(
             alias_or_address=alias_or_address,
             chain=body.chain,
             dex=body.dex,
@@ -65,6 +65,7 @@ async def record_deposit(
             amount_human=getattr(saved, "amount_human", None),
             amount_raw=getattr(saved, "amount_raw", None),
             decimals=getattr(saved, "decimals", None),
+            token_price_usd=getattr(saved, "token_price_usd", None),
             to=getattr(saved, "to", None),
             transfers=transfers,
             tx_hash=saved.tx_hash,
@@ -72,6 +73,7 @@ async def record_deposit(
             ts_ms=int(getattr(saved, "ts_ms", 0) or 0),
             ts_iso=str(getattr(saved, "ts_iso", "") or ""),
         )
+        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -89,7 +91,7 @@ async def record_withdraw(
     use_case: VaultUserEventsUseCase = Depends(get_use_case),
 ):
     try:
-        saved = use_case.record_withdraw(
+        saved = await use_case.record_withdraw(
             alias_or_address=alias_or_address,
             chain=body.chain,
             dex=body.dex,
@@ -114,6 +116,7 @@ async def record_withdraw(
             amount_human=getattr(saved, "amount_human", None),
             amount_raw=getattr(saved, "amount_raw", None),
             decimals=getattr(saved, "decimals", None),
+            token_price_usd=getattr(saved, "token_price_usd", None),
             to=getattr(saved, "to", None),
             transfers=transfers,
             tx_hash=saved.tx_hash,
@@ -121,6 +124,7 @@ async def record_withdraw(
             ts_ms=int(getattr(saved, "ts_ms", 0) or 0),
             ts_iso=str(getattr(saved, "ts_iso", "") or ""),
         )
+        
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -160,6 +164,7 @@ async def list_events(
                     amount_human=getattr(it, "amount_human", None),
                     amount_raw=getattr(it, "amount_raw", None),
                     decimals=getattr(it, "decimals", None),
+                    token_price_usd=getattr(it, "token_price_usd", None),
                     to=getattr(it, "to", None),
                     transfers=transfers,
                     tx_hash=it.tx_hash,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from web3 import Web3
 from eth_utils import keccak
@@ -10,6 +10,8 @@ from adapters.external.database.mongo_client import get_mongo_db
 from adapters.external.database.vault_client_registry_repository_mongodb import VaultRegistryRepositoryMongoDB
 from adapters.external.database.vault_user_events_repository_mongodb import VaultUserEventsRepositoryMongoDB
 
+from adapters.external.signals.market_data_http_client import MarketDataHttpClient
+from config import get_settings
 from core.domain.entities.vault_user_event_entity import VaultUserEventEntity, VaultUserEventTransfer
 
 
@@ -137,16 +139,55 @@ def _sum_transfers(
 class VaultUserEventsUseCase:
     vault_repo: VaultRegistryRepositoryMongoDB
     events_repo: VaultUserEventsRepositoryMongoDB
-
+    market_data: MarketDataHttpClient
+    stable_tokens: Set[str]
+    
     @classmethod
     def from_settings(cls) -> "VaultUserEventsUseCase":
         db = get_mongo_db()
         vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
         events_repo = VaultUserEventsRepositoryMongoDB(db[VaultUserEventsRepositoryMongoDB.COLLECTION])
         events_repo.ensure_indexes()
-        return cls(vault_repo=vault_repo, events_repo=events_repo)
+        
+        st = get_settings()
+        market_data = MarketDataHttpClient.from_settings()
+        stable_tokens = set([x.strip().lower() for x in (st.STABLE_TOKEN_ADDRESSES or []) if x])
 
-    def record_deposit(
+        return cls(
+            vault_repo=vault_repo,
+            events_repo=events_repo,
+            market_data=market_data,
+            stable_tokens=stable_tokens,
+        )
+
+    def _is_stable(self, token_addr: Optional[str]) -> bool:
+        if not token_addr:
+            return False
+        return token_addr.strip().lower() in self.stable_tokens
+
+    async def _try_get_price_usd(self, *, chain: str, token_address: str) -> Optional[str]:
+        """
+        Best-effort:
+        - if stable -> None (skip external call)
+        - else tries api-market-data and returns price_usd as string
+        """
+        token_l = (token_address or "").strip().lower()
+        if not token_l or not token_l.startswith("0x") or len(token_l) != 42:
+            return None
+
+        if self._is_stable(token_l):
+            return None
+
+        try:
+            data = await self.market_data.get_token_price_usd(chain=chain, token_address=token_l)
+            px = data.get("price_usd")
+            if px is None:
+                return None
+            return str(px)
+        except Exception:
+            return None
+        
+    async def record_deposit(
         self,
         *,
         alias_or_address: str,
@@ -190,6 +231,8 @@ class VaultUserEventsUseCase:
             if inferred > 0:
                 amount_raw = str(inferred)
 
+        token_price_usd = await self._try_get_price_usd(chain=(chain or "").strip().lower(), token_address=token_c)
+        
         ent = VaultUserEventEntity(
             vault=vault,
             alias=alias,
@@ -201,13 +244,14 @@ class VaultUserEventsUseCase:
             amount_human=_norm(amount_human),
             amount_raw=_norm(amount_raw),
             decimals=int(decimals) if decimals is not None else None,
+            token_price_usd=token_price_usd,
             tx_hash=(tx_hash or "").strip(),
             block_number=block_number,
             transfers=transfers or None,
         )
         return self.events_repo.upsert_idempotent(ent)
 
-    def record_withdraw(
+    async def record_withdraw(
         self,
         *,
         alias_or_address: str,
@@ -242,6 +286,20 @@ class VaultUserEventsUseCase:
         if rcpt and allow:
             transfers = _parse_erc20_transfers_from_receipt(rcpt, token_allowlist=allow)
 
+        # enrich price_usd per transfer (only for non-stables)
+        chain_n = (chain or "").strip().lower()
+        if transfers:
+            unique_tokens = sorted({(tr.token or "").strip() for tr in transfers if tr.token})
+            prices: Dict[str, Optional[str]] = {}
+
+            for tk in unique_tokens:
+                prices[tk] = await self._try_get_price_usd(chain=chain_n, token_address=tk)
+
+            for tr in transfers:
+                px = prices.get(tr.token)
+                if px is not None:
+                    tr.price_usd = px
+                    
         ent = VaultUserEventEntity(
             vault=vault,
             alias=alias,
