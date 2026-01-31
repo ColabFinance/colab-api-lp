@@ -759,6 +759,9 @@ class VaultStatusService:
 
         # ---------- nfpm reads (batch + caches) ----------
         t = perf_counter()
+        
+        disable_holdings_cache = True
+        
         lower_tick = upper_tick = 0
         liquidity = 0
         fees0_raw = 0
@@ -770,12 +773,18 @@ class VaultStatusService:
 
         if position_token_id:
             nfpm = self._nfpm(nfpm_addr)
-
-            pos_hit = self._get_nfpm_pos_cached(chain=chain, nfpm=nfpm_addr, token_id=position_token_id, fresh_onchain=fresh_onchain)
+            
+            # holdings depend on tickLower/tickUpper/liquidity => DON'T cache NFPM.positions
+            pos_hit = None if disable_holdings_cache else self._get_nfpm_pos_cached(
+                chain=chain, nfpm=nfpm_addr, token_id=position_token_id, fresh_onchain=fresh_onchain
+            )
+            
             collect_hit = self._get_nfpm_collect_cached(chain=chain, nfpm=nfpm_addr, token_id=position_token_id, vault_addr=vault_address, fresh_onchain=fresh_onchain)
             owner_hit = self._get_nft_owner_cached(chain=chain, nfpm=nfpm_addr, token_id=position_token_id, fresh_onchain=fresh_onchain)
 
-            need_pos = not (pos_hit and "lower" in pos_hit and "upper" in pos_hit and "liq" in pos_hit)
+            need_pos = True if disable_holdings_cache else not (
+                pos_hit and "lower" in pos_hit and "upper" in pos_hit and "liq" in pos_hit
+            )
             need_collect = not (collect_hit and "a0" in collect_hit and "a1" in collect_hit)
             need_owner = not (owner_hit and Web3.is_address(owner_hit))
 
@@ -814,8 +823,12 @@ class VaultStatusService:
                         lower_tick = int(p[5])
                         upper_tick = int(p[6])
                         liquidity = int(p[7])
-                        self._set_nfpm_pos_cached(chain=chain, nfpm=nfpm_addr, token_id=position_token_id, lower=lower_tick, upper=upper_tick, liq=liquidity)
-
+                        if not disable_holdings_cache:
+                            self._set_nfpm_pos_cached(
+                                chain=chain, nfpm=nfpm_addr, token_id=position_token_id,
+                                lower=lower_tick, upper=upper_tick, liq=liquidity
+                            )
+                            
                 if idx_collect >= 0 and idx_collect < len(res) and res[idx_collect] is not None:
                     c = res[idx_collect]
                     if isinstance(c, tuple) and len(c) >= 2:
@@ -829,13 +842,13 @@ class VaultStatusService:
                     owner_hit = owner_of
 
             # fill from caches if still missing
-            if pos_hit and (lower_tick, upper_tick, liquidity) == (0, 0, 0):
-                try:
-                    lower_tick = int(pos_hit.get("lower", 0))
-                    upper_tick = int(pos_hit.get("upper", 0))
-                    liquidity = int(pos_hit.get("liq", 0))
-                except Exception:
-                    pass
+            # if pos_hit and (lower_tick, upper_tick, liquidity) == (0, 0, 0):
+            #     try:
+            #         lower_tick = int(pos_hit.get("lower", 0))
+            #         upper_tick = int(pos_hit.get("upper", 0))
+            #         liquidity = int(pos_hit.get("liq", 0))
+            #     except Exception:
+            #         pass
             if collect_hit and (fees0_raw, fees1_raw) == (0, 0):
                 try:
                     fees0_raw = int(collect_hit.get("a0", 0))
@@ -865,8 +878,11 @@ class VaultStatusService:
         e0 = self._erc20(token0_addr)
         e1 = self._erc20(token1_addr)
 
-        bal0_idle_raw = self._get_erc20_balance_cached(chain=chain, token=token0_addr, owner=vault_address, fresh_onchain=fresh_onchain)
-        bal1_idle_raw = self._get_erc20_balance_cached(chain=chain, token=token1_addr, owner=vault_address, fresh_onchain=fresh_onchain)
+        # bal0_idle_raw = self._get_erc20_balance_cached(chain=chain, token=token0_addr, owner=vault_address, fresh_onchain=fresh_onchain)
+        # bal1_idle_raw = self._get_erc20_balance_cached(chain=chain, token=token1_addr, owner=vault_address, fresh_onchain=fresh_onchain)
+
+        bal0_idle_raw = None
+        bal1_idle_raw = None
 
         calls_bal: List[_CallSpec] = []
         idx0 = idx1 = -1
@@ -888,12 +904,16 @@ class VaultStatusService:
 
         if calls_bal:
             resb = self._rpc_batch_call(calls_bal)
+            # if idx0 >= 0 and idx0 < len(resb) and resb[idx0] is not None:
+            #     bal0_idle_raw = int(resb[idx0])
+            #     self._set_erc20_balance_cached(chain=chain, token=token0_addr, owner=vault_address, bal=bal0_idle_raw)
+            # if idx1 >= 0 and idx1 < len(resb) and resb[idx1] is not None:
+            #     bal1_idle_raw = int(resb[idx1])
+            #     self._set_erc20_balance_cached(chain=chain, token=token1_addr, owner=vault_address, bal=bal1_idle_raw)
             if idx0 >= 0 and idx0 < len(resb) and resb[idx0] is not None:
                 bal0_idle_raw = int(resb[idx0])
-                self._set_erc20_balance_cached(chain=chain, token=token0_addr, owner=vault_address, bal=bal0_idle_raw)
             if idx1 >= 0 and idx1 < len(resb) and resb[idx1] is not None:
                 bal1_idle_raw = int(resb[idx1])
-                self._set_erc20_balance_cached(chain=chain, token=token1_addr, owner=vault_address, bal=bal1_idle_raw)
 
         if bal0_idle_raw is None:
             bal0_idle_raw = 0
