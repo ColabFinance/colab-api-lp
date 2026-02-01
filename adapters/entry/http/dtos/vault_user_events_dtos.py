@@ -18,8 +18,12 @@ class VaultUserEventTransfer(BaseModel):
     )
     amount_raw: str
 
+    amount_human: Optional[str] = Field(default=None, description="Human amount inferred from raw+decimals when missing")
+
     symbol: Optional[str] = None
     decimals: Optional[int] = None
+
+    price_usd: Optional[str] = Field(default=None, description="Decimal string (stable=1; non-stable from pricing)")
 
 
 class VaultUserEventDepositIn(BaseModel):
@@ -70,6 +74,8 @@ class VaultUserEventOut(BaseModel):
     amount_human: Optional[str] = None
     amount_raw: Optional[str] = None
     decimals: Optional[int] = None
+
+    token_price_usd: Optional[str] = Field(default=None, description="Decimal string (only for non-stables)")
 
     to: Optional[str] = None
     transfers: Optional[List[VaultUserEventTransfer]] = None

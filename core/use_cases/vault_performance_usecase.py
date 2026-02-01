@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, getcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from web3 import Web3
@@ -9,10 +10,14 @@ from web3 import Web3
 from adapters.external.database.mongo_client import get_mongo_db
 from adapters.external.database.vault_client_registry_repository_mongodb import VaultRegistryRepositoryMongoDB
 from adapters.external.database.vault_user_events_repository_mongodb import VaultUserEventsRepositoryMongoDB
+from adapters.external.market_data.market_data_http_client import MarketDataHttpClient
 from adapters.external.signals.signals_http_client import SignalsHttpClient
 
 from config import get_settings
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
+
+
+getcontext().prec = 78
 
 
 def _now_ms() -> int:
@@ -81,11 +86,6 @@ def _modified_dietz_return(
     end_value_usd: float,
     cashflows: List[Tuple[int, float]],  # (ts_ms, signed_usd) deposits+, withdrawals-
 ) -> Optional[float]:
-    """
-    Modified Dietz:
-      R = (V1 - V0 - sum(CF)) / (V0 + sum(w_i * CF_i))
-    Here we take V0 = 0 (start at first cashflow moment).
-    """
     T = float(end_ms - start_ms)
     if T <= 0:
         return None
@@ -98,14 +98,27 @@ def _modified_dietz_return(
         if ts > end_ms:
             continue
         sum_cf += cf
-        w = float(end_ms - ts) / T  # earlier -> bigger weight
+        w = float(end_ms - ts) / T
         denom += w * cf
 
-    # V0 = 0
     numer = float(end_value_usd) - sum_cf
     if abs(denom) <= 1e-12:
         return None
     return numer / denom
+
+
+def _raw_to_human_float(amount_raw: Optional[str], decimals: Optional[int]) -> Optional[float]:
+    if amount_raw is None or decimals is None:
+        return None
+    try:
+        raw_i = int(str(amount_raw).strip())
+        d = int(decimals)
+        if d < 0 or d > 255:
+            return None
+        val = Decimal(raw_i) / (Decimal(10) ** Decimal(d))
+        return float(val)
+    except Exception:
+        return None
 
 
 @dataclass
@@ -113,6 +126,7 @@ class VaultPerformanceUseCase:
     vault_repo: VaultRegistryRepositoryMongoDB
     user_events_repo: VaultUserEventsRepositoryMongoDB
     signals_client: SignalsHttpClient
+    market_data: MarketDataHttpClient
     stable_tokens: List[str]
 
     @classmethod
@@ -121,6 +135,7 @@ class VaultPerformanceUseCase:
         vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
         user_events_repo = VaultUserEventsRepositoryMongoDB(db[VaultUserEventsRepositoryMongoDB.COLLECTION])
         signals_client = SignalsHttpClient.from_settings()
+        market_data = MarketDataHttpClient.from_settings()
 
         st = get_settings()
         stable = [x.lower() for x in (st.STABLE_TOKEN_ADDRESSES or []) if isinstance(x, str)]
@@ -128,6 +143,7 @@ class VaultPerformanceUseCase:
             vault_repo=vault_repo,
             user_events_repo=user_events_repo,
             signals_client=signals_client,
+            market_data=market_data,
             stable_tokens=stable,
         )
 
@@ -136,21 +152,46 @@ class VaultPerformanceUseCase:
             return False
         return token_addr.strip().lower() in set(self.stable_tokens or [])
 
-    def _sum_gas_costs_usd(self, events: List[Any]) -> Tuple[float, int]:
-        total = 0.0
-        cnt = 0
-        for ev in events or []:
-            try:
-                payload = getattr(ev, "payload", None) or {}
-                cost = _get_nested(payload, ["gas", "cost_usd"])
-                c = _safe_float(cost)
-                if c is None:
-                    continue
-                total += c
-                cnt += 1
-            except Exception:
-                continue
-        return float(total), int(cnt)
+    async def _get_price_usd(
+        self,
+        *,
+        chain: str,
+        token: str,
+        event_price_usd: Optional[str],
+        price_cache: Dict[str, float],
+    ) -> Tuple[Optional[float], str]:
+        """
+        Returns (price_usd, source):
+          - stable => (1.0, "stable")
+          - if event_price_usd => ("event")
+          - else market_data => ("spot")
+        """
+        tk = (token or "").strip()
+        if not tk:
+            return None, "unknown"
+
+        if self._is_stable_token(tk):
+            return 1.0, "stable"
+
+        if event_price_usd is not None and str(event_price_usd).strip() != "":
+            p = _safe_float(event_price_usd)
+            if p is not None:
+                return float(p), "event"
+
+        key = f"{chain}:{tk}".lower()
+        if key in price_cache:
+            return float(price_cache[key]), "spot"
+
+        try:
+            data = await self.market_data.get_token_price_usd(chain=(chain or "").strip().lower(), token_address=tk.lower())
+            px = data.get("price_usd")
+            p = _safe_float(px)
+            if p is None:
+                return None, "unknown"
+            price_cache[key] = float(p)
+            return float(p), "spot"
+        except Exception:
+            return None, "unknown"
 
     async def build_performance(
         self,
@@ -165,6 +206,7 @@ class VaultPerformanceUseCase:
         v_doc = v_ent.to_mongo() if v_ent else {}
         alias = (v_doc.get("alias") or alias_from_registry or alias_or_address).strip()
         dex = (v_doc.get("dex") or "").strip().lower()
+        chain = (v_doc.get("chain") or "").strip().lower()
 
         # --- 1) Episodes from api-signals
         episodes_res = {}
@@ -181,16 +223,13 @@ class VaultPerformanceUseCase:
             episodes_items = list((episodes_res.get("data") or []) if isinstance(episodes_res, dict) else [])
             episodes_total = episodes_res.get("total") if isinstance(episodes_res, dict) else None
 
-        # --- 2) Vault events (api-lp)
-        # vault_events = self.vault_events_repo.get_recent_events(dex=dex, alias=alias, kind=None, limit=5000) if dex and alias else []
-        # gas_total_usd, gas_cnt = self._sum_gas_costs_usd(vault_events)
+        # --- 2) Vault events (gas) [kept as-is]
         gas_total_usd = 0
         gas_cnt = 0
-        
-        # --- 3) User cashflows (api-lp)
-        # Best-effort: pull a lot (can paginate later)
+
+        # --- 3) User cashflows
         user_items = self.user_events_repo.list_by_vault(vault=vault_addr, limit=5000, offset=0)
-        # normalize items to dicts
+
         cashflows: List[Dict[str, Any]] = []
         cashflows_signed: List[Tuple[int, float]] = []
 
@@ -198,59 +237,127 @@ class VaultPerformanceUseCase:
         withdrawn_usd = 0.0
         missing_usd_count = 0
 
+        # per-request, in-memory (NOT persisted cache)
+        price_cache: Dict[str, float] = {}
+
         for it in user_items or []:
             md = it.to_mongo() if hasattr(it, "to_mongo") else (it if isinstance(it, dict) else {})
             et = (md.get("event_type") or "").strip().lower()
             ts_ms = int(md.get("ts_ms") or md.get("created_at") or 0)
             ts_iso = str(md.get("ts_iso") or md.get("created_at_iso") or _ms_to_iso(ts_ms))
-
-            token = _checksum(md.get("token"))
-            amount_human = md.get("amount_human")
-            amount_raw = md.get("amount_raw")
-            decimals = md.get("decimals")
             tx_hash = str(md.get("tx_hash") or "")
 
-            amt_usd: Optional[float] = None
-            usd_src: Optional[str] = None
+            if et == "deposit":
+                token = _checksum(md.get("token"))
+                amount_human = md.get("amount_human")
+                amount_raw = md.get("amount_raw")
+                decimals = md.get("decimals")
+                token_price_usd = md.get("token_price_usd")
 
-            # Deposit: if stable token and have amount_human -> USD exact
-            if et == "deposit" and self._is_stable_token(token):
-                a = _safe_float(amount_human)
-                if a is not None:
-                    amt_usd = float(a)
-                    usd_src = "stable"
+                amt_h = _safe_float(amount_human)
+                if amt_h is None:
+                    amt_h = _raw_to_human_float(amount_raw, decimals)
 
-            # Withdraw: if transfers include stable token(s), sum (best effort)
-            if et == "withdraw" and md.get("transfers"):
-                # transfers are raw; without decimals we can't be perfect.
-                # If you store decimals later per transfer, you can improve this block.
-                # For now: only count if you already store amount_human somewhere (future upgrade).
-                pass
+                price, src = await self._get_price_usd(
+                    chain=chain or (md.get("chain") or "").strip().lower(),
+                    token=token or "",
+                    event_price_usd=token_price_usd,
+                    price_cache=price_cache,
+                )
 
-            if amt_usd is None:
-                missing_usd_count += 1
-            else:
-                if et == "deposit":
+                amt_usd: Optional[float] = None
+                usd_src: Optional[str] = None
+
+                if amt_h is not None and price is not None:
+                    amt_usd = float(amt_h) * float(price)
+                    usd_src = src
                     deposited_usd += amt_usd
                     cashflows_signed.append((ts_ms, +amt_usd))
-                elif et == "withdraw":
-                    withdrawn_usd += amt_usd
-                    cashflows_signed.append((ts_ms, -amt_usd))
+                else:
+                    missing_usd_count += 1
 
-            cashflows.append(
-                {
-                    "event_type": et,
-                    "ts_ms": ts_ms,
-                    "ts_iso": ts_iso,
-                    "token": token,
-                    "amount_human": str(amount_human) if amount_human is not None else None,
-                    "amount_raw": str(amount_raw) if amount_raw is not None else None,
-                    "decimals": int(decimals) if isinstance(decimals, int) else None,
-                    "amount_usd": amt_usd,
-                    "amount_usd_source": usd_src or ("unknown" if amt_usd is None else "spot_est"),
-                    "tx_hash": tx_hash,
-                }
-            )
+                cashflows.append(
+                    {
+                        "event_type": "deposit",
+                        "ts_ms": ts_ms,
+                        "ts_iso": ts_iso,
+                        "token": token,
+                        "amount_human": str(amount_human) if amount_human is not None else (str(amt_h) if amt_h is not None else None),
+                        "amount_raw": str(amount_raw) if amount_raw is not None else None,
+                        "decimals": int(decimals) if isinstance(decimals, int) else None,
+                        "amount_usd": amt_usd,
+                        "amount_usd_source": usd_src or "unknown",
+                        "tx_hash": tx_hash,
+                    }
+                )
+
+            elif et == "withdraw":
+                transfers = md.get("transfers") or []
+                if not transfers:
+                    missing_usd_count += 1
+                    cashflows.append(
+                        {
+                            "event_type": "withdraw",
+                            "ts_ms": ts_ms,
+                            "ts_iso": ts_iso,
+                            "token": None,
+                            "amount_human": None,
+                            "amount_raw": None,
+                            "decimals": None,
+                            "amount_usd": None,
+                            "amount_usd_source": "unknown",
+                            "tx_hash": tx_hash,
+                        }
+                    )
+                    continue
+
+                # one cashflow entry per transfer (multi-token withdraw)
+                for tr in transfers:
+                    token = _checksum((tr.get("token") if isinstance(tr, dict) else None) or "")
+                    amount_raw = (tr.get("amount_raw") if isinstance(tr, dict) else None)
+                    decimals = (tr.get("decimals") if isinstance(tr, dict) else None)
+                    amount_human = (tr.get("amount_human") if isinstance(tr, dict) else None)
+                    price_usd = (tr.get("price_usd") if isinstance(tr, dict) else None)
+
+                    amt_h = _safe_float(amount_human)
+                    if amt_h is None:
+                        amt_h = _raw_to_human_float(amount_raw, decimals)
+
+                    price, src = await self._get_price_usd(
+                        chain=chain or (md.get("chain") or "").strip().lower(),
+                        token=token or "",
+                        event_price_usd=price_usd,
+                        price_cache=price_cache,
+                    )
+
+                    amt_usd: Optional[float] = None
+                    usd_src: Optional[str] = None
+
+                    if amt_h is not None and price is not None:
+                        amt_usd = float(amt_h) * float(price)
+                        usd_src = src
+                        withdrawn_usd += amt_usd
+                        cashflows_signed.append((ts_ms, -amt_usd))
+                    else:
+                        missing_usd_count += 1
+
+                    cashflows.append(
+                        {
+                            "event_type": "withdraw",
+                            "ts_ms": ts_ms,
+                            "ts_iso": ts_iso,
+                            "token": token,
+                            "amount_human": str(amount_human) if amount_human is not None else (str(amt_h) if amt_h is not None else None),
+                            "amount_raw": str(amount_raw) if amount_raw is not None else None,
+                            "decimals": int(decimals) if isinstance(decimals, int) else None,
+                            "amount_usd": amt_usd,
+                            "amount_usd_source": usd_src or "unknown",
+                            "tx_hash": tx_hash,
+                        }
+                    )
+            else:
+                # ignore unknown types but keep transparency
+                continue
 
         cashflows.sort(key=lambda x: int(x.get("ts_ms") or 0))
 
@@ -264,13 +371,11 @@ class VaultPerformanceUseCase:
             "source": "unknown",
         }
 
-        # Try to use your existing status use case if exists
         st = None
         try:
             status_uc = VaultClientVaultUseCase.from_settings()
-            # support both sync and async
             if hasattr(status_uc, "get_status"):
-                got = status_uc.get_status(alias)  # may be awaitable
+                got = status_uc.get_status(alias)
                 st = (await got) if hasattr(got, "__await__") else got
         except Exception:
             st = None
@@ -288,7 +393,6 @@ class VaultPerformanceUseCase:
             current_value["rewards_pending_usd"] = _safe_float(_get_nested(st, ["gauge_rewards", "pending_usd_est"]))
             current_value["source"] = "live_status"
         else:
-            # fallback: last CLOSED episode metrics.totals_usd
             last_totals = None
             for ep in episodes_items or []:
                 if str(ep.get("status") or "").upper() == "CLOSED":
@@ -302,7 +406,7 @@ class VaultPerformanceUseCase:
 
         # --- 5) Profit (to-date + annualized APR/APY)
         end_value = float(current_value["total_usd"] or 0.0)
-        net_contributed = (deposited_usd - withdrawn_usd) if (missing_usd_count == 0 or deposited_usd > 0) else None
+        net_contributed = (deposited_usd - withdrawn_usd)
 
         profit_usd = None
         profit_pct = None
@@ -316,15 +420,13 @@ class VaultPerformanceUseCase:
             profit_net_gas_usd = profit_usd - float(gas_total_usd or 0.0)
             profit_net_gas_pct = (profit_net_gas_usd / deposited_usd) if deposited_usd > 0 else None
 
-        # Annualized via Modified Dietz (cashflow-aware)
         annual = {"method": "modified_dietz", "days": None, "daily_rate": None, "apr": None, "apy_daily_compound": None}
 
         if cashflows and (end_value is not None):
             start_ms = int(cashflows[0].get("ts_ms") or 0)
             end_ms = _now_ms()
             days = float(end_ms - start_ms) / 86400000.0 if end_ms > start_ms else 0.0
-            
-            # only use valued cashflows
+
             cf = [(ts, amt) for (ts, amt) in cashflows_signed if isinstance(ts, int)]
             R = _modified_dietz_return(start_ms=start_ms, end_ms=end_ms, end_value_usd=end_value, cashflows=cf)
             if R is not None and days > 2:
@@ -360,7 +462,6 @@ class VaultPerformanceUseCase:
                 }
             )
 
-        # --- response (front-ready)
         start_iso = cashflows[0]["ts_iso"] if cashflows else None
         out = {
             "vault": {
