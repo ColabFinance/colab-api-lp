@@ -20,6 +20,15 @@ from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 getcontext().prec = 78
 
 
+# --- Stablecoin decimals fallback (avoid any pricing/pool lookup for stables)
+STABLE_DECIMALS_BY_CHAIN: Dict[str, Dict[str, int]] = {
+    "base": {
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": 6,  # USDC (Base)
+        "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": 6,  # (your stable list example)
+    }
+}
+
+
 def _now_ms() -> int:
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
@@ -138,7 +147,8 @@ class VaultPerformanceUseCase:
         market_data = MarketDataHttpClient.from_settings()
 
         st = get_settings()
-        stable = [x.lower() for x in (st.STABLE_TOKEN_ADDRESSES or []) if isinstance(x, str)]
+        stable = [x.strip().lower() for x in (st.STABLE_TOKEN_ADDRESSES or []) if isinstance(x, str) and x.strip()]
+
         return cls(
             vault_repo=vault_repo,
             user_events_repo=user_events_repo,
@@ -152,46 +162,90 @@ class VaultPerformanceUseCase:
             return False
         return token_addr.strip().lower() in set(self.stable_tokens or [])
 
-    async def _get_price_usd(
+    async def _get_decimals_and_price_usd(
         self,
         *,
         chain: str,
         token: str,
         event_price_usd: Optional[str],
+        decimals: Optional[int],  # decimals from event/transfer if available
         price_cache: Dict[str, float],
-    ) -> Tuple[Optional[float], str]:
+        decimals_cache: Dict[str, int],
+    ) -> Tuple[Optional[float], Optional[int], str]:
         """
-        Returns (price_usd, source):
-          - stable => (1.0, "stable")
-          - if event_price_usd => ("event")
-          - else market_data => ("spot")
+        Returns (price_usd, decimals, source):
+          - stable => price=1.0, decimals resolved, source="stable"
+          - if event_price_usd => price from event, decimals resolved, source="event"
+          - else market_data => price from spot, decimals resolved, source="spot"
         """
         tk = (token or "").strip()
         if not tk:
-            return None, "unknown"
+            return None, None, "unknown"
 
+        chain_n = (chain or "").strip().lower()
+        key = f"{chain_n}:{tk}".lower()
+
+        # --- helper: resolve decimals (event -> cache -> market_data)
+        async def _resolve_decimals() -> Optional[int]:
+            d_local = STABLE_DECIMALS_BY_CHAIN.get(chain_n, {}).get(tk.lower())
+            if d_local is not None:
+                return int(d_local)
+            
+            if decimals is not None:
+                try:
+                    d = int(decimals)
+                    if 0 <= d <= 255:
+                        return d
+                except Exception:
+                    pass
+
+            if key in decimals_cache:
+                return int(decimals_cache[key])
+
+            try:
+                data = await self.market_data.get_token_price_usd(chain=chain_n, token_address=tk.lower())
+                d = data.get("decimals")
+                if d is None:
+                    return None
+                d = int(d)
+                if not (0 <= d <= 255):
+                    return None
+                decimals_cache[key] = d
+                return d
+            except Exception:
+                return None
+
+        # stable path: price is 1, but decimals still needed
         if self._is_stable_token(tk):
-            return 1.0, "stable"
+            d = await _resolve_decimals()
+            return 1.0, d, "stable"
 
+        # event price path
         if event_price_usd is not None and str(event_price_usd).strip() != "":
             p = _safe_float(event_price_usd)
-            if p is not None:
-                return float(p), "event"
+            d = await _resolve_decimals()
+            if p is not None and d is not None:
+                return float(p), int(d), "event"
 
-        key = f"{chain}:{tk}".lower()
+        # cached spot price
         if key in price_cache:
-            return float(price_cache[key]), "spot"
+            d = await _resolve_decimals()
+            if d is None:
+                return None, None, "unknown"
+            return float(price_cache[key]), int(d), "spot"
 
+        # market_data spot
         try:
-            data = await self.market_data.get_token_price_usd(chain=(chain or "").strip().lower(), token_address=tk.lower())
+            data = await self.market_data.get_token_price_usd(chain=chain_n, token_address=tk.lower())
             px = data.get("price_usd")
             p = _safe_float(px)
-            if p is None:
-                return None, "unknown"
+            d = await _resolve_decimals()
+            if p is None or d is None:
+                return None, None, "unknown"
             price_cache[key] = float(p)
-            return float(p), "spot"
+            return float(p), int(d), "spot"
         except Exception:
-            return None, "unknown"
+            return None, None, "unknown"
 
     async def build_performance(
         self,
@@ -239,6 +293,7 @@ class VaultPerformanceUseCase:
 
         # per-request, in-memory (NOT persisted cache)
         price_cache: Dict[str, float] = {}
+        decimals_cache: Dict[str, int] = {}
 
         for it in user_items or []:
             md = it.to_mongo() if hasattr(it, "to_mongo") else (it if isinstance(it, dict) else {})
@@ -254,16 +309,18 @@ class VaultPerformanceUseCase:
                 decimals = md.get("decimals")
                 token_price_usd = md.get("token_price_usd")
 
-                amt_h = _safe_float(amount_human)
-                if amt_h is None:
-                    amt_h = _raw_to_human_float(amount_raw, decimals)
-
-                price, src = await self._get_price_usd(
+                price, resolved_decimals, src = await self._get_decimals_and_price_usd(
                     chain=chain or (md.get("chain") or "").strip().lower(),
                     token=token or "",
                     event_price_usd=token_price_usd,
+                    decimals=md.get("decimals"),
                     price_cache=price_cache,
+                    decimals_cache=decimals_cache,
                 )
+
+                amt_h = _safe_float(amount_human)
+                if amt_h is None:
+                    amt_h = _raw_to_human_float(amount_raw, resolved_decimals)
 
                 amt_usd: Optional[float] = None
                 usd_src: Optional[str] = None
@@ -284,7 +341,7 @@ class VaultPerformanceUseCase:
                         "token": token,
                         "amount_human": str(amount_human) if amount_human is not None else (str(amt_h) if amt_h is not None else None),
                         "amount_raw": str(amount_raw) if amount_raw is not None else None,
-                        "decimals": int(decimals) if isinstance(decimals, int) else None,
+                        "decimals": int(resolved_decimals) if isinstance(resolved_decimals, int) else None,
                         "amount_usd": amt_usd,
                         "amount_usd_source": usd_src or "unknown",
                         "tx_hash": tx_hash,
@@ -319,17 +376,21 @@ class VaultPerformanceUseCase:
                     amount_human = (tr.get("amount_human") if isinstance(tr, dict) else None)
                     price_usd = (tr.get("price_usd") if isinstance(tr, dict) else None)
 
-                    amt_h = _safe_float(amount_human)
-                    if amt_h is None:
-                        amt_h = _raw_to_human_float(amount_raw, decimals)
-
-                    price, src = await self._get_price_usd(
+                    price, resolved_decimals, src = await self._get_decimals_and_price_usd(
                         chain=chain or (md.get("chain") or "").strip().lower(),
                         token=token or "",
                         event_price_usd=price_usd,
+                        decimals=decimals,
                         price_cache=price_cache,
+                        decimals_cache=decimals_cache,
                     )
 
+                    print("price, decimals, src",price, decimals, src)
+                    
+                    amt_h = _safe_float(amount_human)
+                    if amt_h is None:
+                        amt_h = _raw_to_human_float(amount_raw, resolved_decimals)
+                        
                     amt_usd: Optional[float] = None
                     usd_src: Optional[str] = None
 
@@ -349,7 +410,7 @@ class VaultPerformanceUseCase:
                             "token": token,
                             "amount_human": str(amount_human) if amount_human is not None else (str(amt_h) if amt_h is not None else None),
                             "amount_raw": str(amount_raw) if amount_raw is not None else None,
-                            "decimals": int(decimals) if isinstance(decimals, int) else None,
+                            "decimals": int(resolved_decimals) if isinstance(resolved_decimals, int) else None,
                             "amount_usd": amt_usd,
                             "amount_usd_source": usd_src or "unknown",
                             "tx_hash": tx_hash,
