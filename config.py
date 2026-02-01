@@ -51,12 +51,12 @@ class Settings:
 @lru_cache()
 def get_settings() -> Settings:
     stable_default = [
-        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238",
     ]
 
     stable_raw = os.getenv("STABLE_TOKEN_ADDRESSES", "")
-    stable_list = _parse_csv(stable_raw, lower=True) or [x.lower() for x in stable_default]
+    stable_list = _parse_csv(stable_raw) or [x for x in stable_default]
 
     return Settings(
         # Core chain
