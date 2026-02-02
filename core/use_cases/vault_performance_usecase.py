@@ -385,8 +385,6 @@ class VaultPerformanceUseCase:
                         decimals_cache=decimals_cache,
                     )
 
-                    print("price, decimals, src",price, decimals, src)
-                    
                     amt_h = _safe_float(amount_human)
                     if amt_h is None:
                         amt_h = _raw_to_human_float(amount_raw, resolved_decimals)
@@ -421,6 +419,41 @@ class VaultPerformanceUseCase:
                 continue
 
         cashflows.sort(key=lambda x: int(x.get("ts_ms") or 0))
+        
+        # detect "vault closed" because withdraw is withdraw-all
+        last_cf = cashflows[-1] if cashflows else None
+        last_cf_type = (last_cf.get("event_type") or "").strip().lower() if isinstance(last_cf, dict) else None
+        last_cf_ts = int(last_cf.get("ts_ms") or 0) if isinstance(last_cf, dict) else None
+        closed_by_withdraw_all = bool(last_cf_type == "withdraw")
+
+        # define "as_of" (if vault closed, stop the period at withdraw time)
+        as_of_ms = int(last_cf_ts) if (closed_by_withdraw_all and last_cf_ts) else _now_ms()
+        as_of_iso = _ms_to_iso(as_of_ms)
+
+        # compute a "cycle start" (after last reset)
+        # if still open: start after last withdraw (reset)
+        # if closed: start after the *previous* withdraw (so the last cycle is measured)
+        withdraw_ts = sorted({int(x.get("ts_ms") or 0) for x in cashflows if (x.get("event_type") == "withdraw")})
+        if not withdraw_ts:
+            reset_after_ts: Optional[int] = None
+        else:
+            if closed_by_withdraw_all:
+                reset_after_ts = withdraw_ts[-2] if len(withdraw_ts) >= 2 else None
+            else:
+                reset_after_ts = withdraw_ts[-1]
+
+        cycle_start_ms: Optional[int] = None
+        if cashflows:
+            if reset_after_ts is None:
+                cycle_start_ms = int(cashflows[0].get("ts_ms") or 0)
+            else:
+                for cf in cashflows:
+                    ts = int(cf.get("ts_ms") or 0)
+                    if ts > int(reset_after_ts):
+                        cycle_start_ms = ts
+                        break
+                if cycle_start_ms is None:
+                    cycle_start_ms = int(cashflows[0].get("ts_ms") or 0)
 
         # --- 4) Current value (live status if available; fallback: last closed episode totals_usd)
         current_value = {
@@ -453,21 +486,50 @@ class VaultPerformanceUseCase:
             current_value["fees_uncollected_usd"] = _safe_float(_get_nested(st, ["fees_uncollected", "usd"]))
             current_value["rewards_pending_usd"] = _safe_float(_get_nested(st, ["gauge_rewards", "pending_usd_est"]))
             current_value["source"] = "live_status"
-        else:
-            last_totals = None
+        
+        # fallback to last closed episode only if still missing AND vault is not closed-by-withdraw
+        if current_value["total_usd"] is None and not closed_by_withdraw_all:
+            best_totals = None
+            best_close = -1
             for ep in episodes_items or []:
-                if str(ep.get("status") or "").upper() == "CLOSED":
-                    m = ep.get("metrics") or {}
-                    last_totals = _safe_float(m.get("totals_usd"))
-                    if last_totals is not None:
-                        break
-            if last_totals is not None:
-                current_value["total_usd"] = last_totals
+                if str(ep.get("status") or "").upper() != "CLOSED":
+                    continue
+                ct = ep.get("close_time")
+                try:
+                    ct_i = int(ct) if ct is not None else 0
+                except Exception:
+                    ct_i = 0
+
+                m = ep.get("metrics") or {}
+                totals_usd = _safe_float(m.get("totals_usd"))
+                if totals_usd is None:
+                    continue
+
+                if ct_i >= best_close:
+                    best_close = ct_i
+                    best_totals = totals_usd
+
+            if best_totals is not None:
+                current_value["total_usd"] = float(best_totals)
                 current_value["source"] = "last_episode"
 
+        # if last cashflow is withdraw-all, force end_value to zero when live_status is missing/stale
+        # (this fixes profit/net_contributed when you withdrew everything)
+        if closed_by_withdraw_all:
+            live_total = _safe_float(current_value.get("total_usd"))
+            if live_total is None:
+                current_value["total_usd"] = 0.0
+                current_value["in_position_usd"] = 0.0
+                current_value["vault_idle_usd"] = 0.0
+                current_value["fees_uncollected_usd"] = 0.0
+                current_value["rewards_pending_usd"] = 0.0
+                current_value["source"] = "withdraw_all_assumed_zero"
+
         # --- 5) Profit (to-date + annualized APR/APY)
-        end_value = float(current_value["total_usd"] or 0.0)
-        net_contributed = (deposited_usd - withdrawn_usd)
+        end_value = float(_safe_float(current_value.get("total_usd")) or 0.0)
+
+        # your expected sign
+        net_contributed = (withdrawn_usd - deposited_usd)
 
         profit_usd = None
         profit_pct = None
@@ -483,14 +545,15 @@ class VaultPerformanceUseCase:
 
         annual = {"method": "modified_dietz", "days": None, "daily_rate": None, "apr": None, "apy_daily_compound": None}
 
-        if cashflows and (end_value is not None):
-            start_ms = int(cashflows[0].get("ts_ms") or 0)
-            end_ms = _now_ms()
+        # annualize only within the active cycle window (after last reset)
+        if cashflows and (cycle_start_ms is not None) and (as_of_ms is not None):
+            start_ms = int(cycle_start_ms)
+            end_ms = int(as_of_ms)
             days = float(end_ms - start_ms) / 86400000.0 if end_ms > start_ms else 0.0
 
-            cf = [(ts, amt) for (ts, amt) in cashflows_signed if isinstance(ts, int)]
-            R = _modified_dietz_return(start_ms=start_ms, end_ms=end_ms, end_value_usd=end_value, cashflows=cf)
-            if R is not None and days > 2:
+            cf_cycle = [(ts, amt) for (ts, amt) in cashflows_signed if isinstance(ts, int) and start_ms <= ts <= end_ms]
+            R = _modified_dietz_return(start_ms=start_ms, end_ms=end_ms, end_value_usd=end_value, cashflows=cf_cycle)
+            if R is not None and days >= 7.0:
                 daily = (1.0 + float(R)) ** (1.0 / days) - 1.0
                 apr = daily * 365.0
                 apy = (1.0 + daily) ** 365.0 - 1.0
@@ -523,7 +586,9 @@ class VaultPerformanceUseCase:
                 }
             )
 
-        start_iso = cashflows[0]["ts_iso"] if cashflows else None
+        lifetime_start_iso = cashflows[0]["ts_iso"] if cashflows else None
+        cycle_start_iso = _ms_to_iso(int(cycle_start_ms)) if cycle_start_ms else lifetime_start_iso
+
         out = {
             "vault": {
                 "address": vault_addr,
@@ -535,8 +600,14 @@ class VaultPerformanceUseCase:
                 "config": v_doc.get("config"),
             },
             "period": {
-                "start_ts_iso": start_iso,
-                "end_ts_iso": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                # prefer cycle start (after last reset) for "current period"
+                "start_ts_iso": cycle_start_iso,
+                # keep lifetime start too (useful for UI)
+                "lifetime_start_ts_iso": lifetime_start_iso,
+                # if vault is closed, end at withdraw time; else now
+                "end_ts_iso": as_of_iso,
+                "as_of_ms": as_of_ms,
+                "closed_by_withdraw_all": closed_by_withdraw_all,
             },
             "cashflows": cashflows,
             "cashflows_totals": {
