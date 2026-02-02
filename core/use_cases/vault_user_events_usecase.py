@@ -199,6 +199,28 @@ def _extract_token_meta_from_pricing(pricing: Dict[str, Any], *, token_address: 
     return out
 
 
+def _filter_payout_transfers(
+    transfers: List[VaultUserEventTransfer],
+    *,
+    payout_to: str,
+    payout_from: Optional[str] = None,
+) -> List[VaultUserEventTransfer]:
+    to_c = _checksum_if_addr(payout_to)
+    from_c = _checksum_if_addr(payout_from) if payout_from else None
+
+    out: List[VaultUserEventTransfer] = []
+    for t in transfers or []:
+        try:
+            if to_c and _checksum_if_addr(t.to_addr) != to_c:
+                continue
+            if from_c and _checksum_if_addr(t.from_addr) != from_c:
+                continue
+            out.append(t)
+        except Exception:
+            continue
+    return out
+
+
 @dataclass
 class VaultUserEventsUseCase:
     vault_repo: VaultRegistryRepositoryMongoDB
@@ -391,20 +413,26 @@ class VaultUserEventsUseCase:
             if tc and Web3.is_address(tc):
                 allow.append(tc)
 
-        transfers: List[VaultUserEventTransfer] = []
+        all_transfers: List[VaultUserEventTransfer] = []
         if rcpt and allow:
-            transfers = _parse_erc20_transfers_from_receipt(rcpt, token_allowlist=allow)
+            all_transfers = _parse_erc20_transfers_from_receipt(rcpt, token_allowlist=allow)
 
+        payout_transfers = _filter_payout_transfers(
+            all_transfers,
+            payout_to=to_c,
+            payout_from=vault,
+        )
+            
         # Enrich each transfer with: decimals, symbol, price_usd, amount_human (if missing)
         chain_n = (chain or "").strip().lower()
-        if transfers:
-            unique_tokens = sorted({(tr.token or "").strip() for tr in transfers if tr.token})
+        if payout_transfers:
+            unique_tokens = sorted({(tr.token or "").strip() for tr in payout_transfers if tr.token})
             pricing_by_token: Dict[str, Dict[str, Any]] = {}
 
             for tk in unique_tokens:
                 pricing_by_token[tk] = await self._try_get_pricing_details(chain=chain_n, token_address=tk)
 
-            for tr in transfers:
+            for tr in payout_transfers:
                 pr = pricing_by_token.get(tr.token) or {}
                 meta = _extract_token_meta_from_pricing(pr, token_address=tr.token)
 
@@ -439,7 +467,7 @@ class VaultUserEventsUseCase:
             to=to_c,
             tx_hash=(tx_hash or "").strip(),
             block_number=block_number,
-            transfers=transfers or None,
+            transfers=payout_transfers or None,
         )
         return self.events_repo.upsert_idempotent(ent)
 
