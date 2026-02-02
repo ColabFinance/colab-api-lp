@@ -11,6 +11,7 @@ from adapters.entry.http.dtos.vaults_client_vault_dtos import (
     CompoundConfigUpdateRequest,
     RewardSwapConfigUpdateRequest,
 )
+from adapters.external.signals.signals_http_client import SignalsHttpClient
 from core.services.exceptions import TransactionRevertedError
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 
@@ -76,6 +77,20 @@ async def create_client_vault(
             config_in=body.config,
             gas_strategy=body.gas_strategy,
         )
+
+        try:
+            alias = str(out.get("alias") or "").strip()
+            if alias:
+                sig = SignalsHttpClient.from_settings()
+                await sig.link_vault_to_strategy(
+                    chain=body.chain,
+                    owner=body.owner,
+                    strategy_id=body.strategy_id,
+                    dex=body.dex,
+                    alias=alias,
+                )
+        except Exception as e:
+            pass
 
         return TxRunResponse.from_tx_any(
             tx_any=out.get("tx"),
