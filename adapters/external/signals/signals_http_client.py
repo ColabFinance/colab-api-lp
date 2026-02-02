@@ -42,3 +42,28 @@ class SignalsHttpClient:
             if res.status_code >= 400:
                 raise RuntimeError(data.get("detail") or data.get("message") or f"signals_error_{res.status_code}")
             return data
+
+    async def link_vault_to_strategy(
+        self,
+        *,
+        chain: str,
+        owner: str,
+        strategy_id: int,
+        dex: str,
+        alias: str,
+    ) -> Dict[str, Any]:
+        url = f"{self.base_url}/api/strategies/vault-link"
+        payload = {
+            "chain": (chain or "").strip().lower(),
+            "owner": (owner or "").strip(),
+            "strategy_id": int(strategy_id),
+            "dex": (dex or "").strip().lower(),
+            "alias": (alias or "").strip(),
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as cli:
+            res = await cli.post(url, json=payload)
+            data = res.json() if res.content else {}
+            if res.status_code >= 400:
+                raise RuntimeError(data.get("detail") or data.get("message") or f"signals_error_{res.status_code}")
+            return data
