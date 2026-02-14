@@ -37,6 +37,11 @@ class VaultCreateConfigIn(BaseModel):
 
     swap_pools: Dict[str, VaultSwapPoolRefIn] = Field(default_factory=dict)
 
+    reward_swap_pool: Optional[str] = Field(
+        default=None,
+        description="Pool address used to swap rewards (optional; usually filled from dex_pools)",
+    )
+    
     model_config = ConfigDict(extra="ignore")
 
     def to_domain(self, *, address: str) -> VaultConfig:
@@ -48,5 +53,6 @@ class VaultCreateConfigIn(BaseModel):
             gauge=self.gauge,
             rpc_url=self.rpc_url,
             version=self.version,
+            reward_swap_pool=self.reward_swap_pool,
             swap_pools={k: v.to_domain() for k, v in (self.swap_pools or {}).items()},
         )

@@ -69,6 +69,7 @@ async def create_dex_pool(
             symbol=body.symbol,
             adapter=body.adapter,
             reward_token=body.reward_token,
+            reward_swap_pool=body.reward_swap_pool,
             status=body.status,
         )
     except ValueError as exc:
