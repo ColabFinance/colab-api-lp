@@ -121,6 +121,7 @@ class AdminDexRegistryUseCase:
         symbol: str = "",
         adapter: str | None = None,
         reward_token: str,
+        reward_swap_pool: str = "0x0000000000000000000000000000000000000000",
         status: DexRegistryStatus = DexRegistryStatus.ACTIVE,
     ) -> dict:
         chain = _norm_lower(chain)
@@ -155,7 +156,8 @@ class AdminDexRegistryUseCase:
             fee_rate=fee_rate,
             adapter=adapter,
             status=status,
-            reward_token=reward_token
+            reward_token=reward_token,
+            reward_swap_pool=reward_swap_pool
         )
         self.pool_repo.insert(ent)
 
@@ -176,6 +178,7 @@ class AdminDexRegistryUseCase:
                 "fee_rate": ent.fee_rate,
                 "adapter": ent.adapter,
                 "reward_token": ent.reward_token,
+                "reward_swap_pool": ent.reward_swap_pool,
                 "status": ent.status,
                 "created_at": ent.created_at_iso,
             },
@@ -206,6 +209,7 @@ class AdminDexRegistryUseCase:
                 "adapter": r.adapter,
                 "status": r.status,
                 "reward_token": r.reward_token,
+                "reward_swap_pool": getattr(r, "reward_swap_pool", "0x0000000000000000000000000000000000000000"),
                 "created_at": r.created_at_iso,
             }
             for r in rows
