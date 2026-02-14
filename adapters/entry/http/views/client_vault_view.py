@@ -3,9 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.dtos.vault_status_dtos import VaultStatusOut
 from adapters.entry.http.dtos.vaults_client_vault_dtos import (
-    CreateClientVaultRequest,
     RegisterClientVaultRequest,
-    TxRunResponse,
     VaultRegistryOut,
     DailyHarvestConfigUpdateRequest,
     CompoundConfigUpdateRequest,
@@ -53,67 +51,6 @@ async def get_status(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to get vault status: {exc}") from exc
-
-
-
-@router.post(
-    "/create-client-vault",
-    response_model=TxRunResponse,
-    summary="Create ClientVault on-chain and register in Mongo vault_registry",
-)
-async def create_client_vault(
-    body: CreateClientVaultRequest,
-    use_case: VaultClientVaultUseCase = Depends(get_use_case),
-):
-    try:
-        out = use_case.create_client_vault_and_register(
-            strategy_id=body.strategy_id,
-            owner=body.owner,
-            chain=body.chain,
-            dex=body.dex,
-            par_token=body.par_token,
-            name=body.name,
-            description=body.description,
-            config_in=body.config,
-            gas_strategy=body.gas_strategy,
-        )
-
-        try:
-            alias = str(out.get("alias") or "").strip()
-            if alias:
-                sig = SignalsHttpClient.from_settings()
-                await sig.link_vault_to_strategy(
-                    chain=body.chain,
-                    owner=body.owner,
-                    strategy_id=body.strategy_id,
-                    dex=body.dex,
-                    alias=alias,
-                )
-        except Exception as e:
-            pass
-
-        return TxRunResponse.from_tx_any(
-            tx_any=out.get("tx"),
-            vault_address=out.get("vault_address"),
-            alias=out.get("alias"),
-            mongo_id=out.get("mongo_id"),
-        )
-
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except TransactionRevertedError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "reverted_on_chain",
-                "tx": exc.tx_hash,
-                "receipt": exc.receipt,
-                "hint": "Possibly require() failed or out-of-gas.",
-                "budget": getattr(exc, "budget_block", None),
-            },
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to createClientVault: {exc}") from exc
 
 
 @router.post(

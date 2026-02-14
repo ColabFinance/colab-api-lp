@@ -87,21 +87,6 @@ class TxRunResponse(BaseModel):
             mongo_id=mongo_id,
         )
 
-
-class CreateClientVaultRequest(BaseModel):
-    strategy_id: int = Field(..., ge=1)
-    owner: str = Field(..., description="Owner address to create vault for (required)")
-    gas_strategy: str = Field(default="buffered", description="default|buffered|aggressive")
-
-    chain: str = Field(..., description="ex: base")
-    dex: str = Field(..., description="ex: pancake|aerodrome|uniswap")
-    par_token: str = Field(..., description="Ex: WETH or CAKE or any symbol identifier used in alias")
-    name: str = Field(..., description="Human friendly name (user-provided)")
-    description: Optional[str] = Field(default=None, description="Human friendly description")
-
-    config: VaultCreateConfigIn = Field(..., description="Vault config persisted under `config`")
-
-
 class RegisterClientVaultRequest(BaseModel):
     vault_address: str
     strategy_id: int
