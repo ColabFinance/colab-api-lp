@@ -25,7 +25,7 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
             self._collection = col
             self._db = col.database
         else:
-            self._db = db or get_mongo_db()
+            self._db = db if db is not None else get_mongo_db()
             self._collection = self._db[self.COLLECTION_NAME]
         self.ensure_indexes()
 
@@ -173,8 +173,8 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
             set_doc["config"] = cfg
 
         # touch timestamps (ms/iso) consistently with entity base
-        now_ms = VaultRegistryEntity.now_ms_static()
-        now_iso = VaultRegistryEntity.now_iso_static()
+        now_ms = VaultRegistryEntity.now_ms()
+        now_iso = VaultRegistryEntity.now_iso()
         set_doc["updated_at"] = now_ms
         set_doc["updated_at_iso"] = now_iso
 
