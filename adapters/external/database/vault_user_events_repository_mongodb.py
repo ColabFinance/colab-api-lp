@@ -1,61 +1,84 @@
+# vault_user_events_repository_mongodb.py
+
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from pymongo.collection import Collection
 from pymongo import ReturnDocument
-from web3 import Web3
+from pymongo.collection import Collection
+from pymongo.database import Database
 
+from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
+from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
 from core.domain.entities.vault_user_event_entity import VaultUserEventEntity
-from core.domain.repositories.vault_user_events_repository_interface import VaultUserEventsRepositoryInterface
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _now_iso() -> str:
-    return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+from core.services.normalize import _norm_lower
 
 
 class VaultUserEventsRepositoryMongoDB:
-    COLLECTION = "vault_user_events"
+    COLLECTION_NAME = "vault_user_events"
+    COLLECTION = COLLECTION_NAME
 
-    def __init__(self, col: Collection):
-        self._col = col
+    def __init__(self, db: Optional[Database] = None, col: Optional[Collection] = None) -> None:
+        if col is not None:
+            self._col = col
+            self._db = col.database
+        else:
+            self._db = db or get_mongo_db()
+            self._col = self._db[self.COLLECTION_NAME]
+        self.ensure_indexes()
+
+    @property
+    def collection(self) -> Collection:
+        return self._col
 
     def ensure_indexes(self) -> None:
-        # idempotency
         self._col.create_index([("chain", 1), ("tx_hash", 1), ("event_type", 1)], unique=True, name="ux_chain_tx_type")
         self._col.create_index([("vault", 1), ("ts_ms", -1)], name="ix_vault_ts_desc")
         self._col.create_index([("owner", 1), ("ts_ms", -1)], name="ix_owner_ts_desc")
 
+    def _normalize_doc(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        for k in ("vault", "alias", "chain", "dex", "event_type", "owner", "token", "to", "tx_hash"):
+            if k in doc and isinstance(doc.get(k), str):
+                doc[k] = _norm_lower(doc.get(k))
+
+        transfers = doc.get("transfers")
+        if isinstance(transfers, list):
+            for tr in transfers:
+                if not isinstance(tr, dict):
+                    continue
+                for k in ("token", "from", "to", "symbol", "price_usd", "amount_raw", "amount_human"):
+                    if k in tr and isinstance(tr.get(k), str):
+                        tr[k] = _norm_lower(tr.get(k))
+
+        return doc
+
     def upsert_idempotent(self, entity: VaultUserEventEntity) -> VaultUserEventEntity:
-        doc = entity.to_mongo()
+        entity = entity.touch_for_insert()
+        doc = sanitize_for_mongo(entity.to_mongo())
+        doc = self._normalize_doc(doc)
 
-        now_ms = _now_ms()
-        now_iso = _now_iso()
+        # ensure event timestamps exist
+        if doc.get("ts_ms") is None:
+            doc["ts_ms"] = int(entity.now_ms())
+        if doc.get("ts_iso") is None:
+            doc["ts_iso"] = str(entity.now_iso())
 
-        doc.setdefault("ts_ms", now_ms)
-        doc.setdefault("ts_iso", now_iso)
-
-        q = {"chain": doc.get("chain"), "tx_hash": doc.get("tx_hash"), "event_type": doc.get("event_type")}
+        q = {
+            "chain": doc.get("chain"),
+            "tx_hash": doc.get("tx_hash"),
+            "event_type": doc.get("event_type"),
+        }
 
         saved = self._col.find_one_and_update(
             q,
-            {"$setOnInsert": doc, "$set": {"updated_at": now_ms, "updated_at_iso": now_iso}},
+            {"$setOnInsert": doc, "$set": {"updated_at": entity.now_ms(), "updated_at_iso": entity.now_iso()}},
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )
         return VaultUserEventEntity.from_mongo(saved)
 
     def list_by_vault(self, *, vault: str, limit: int, offset: int) -> List[VaultUserEventEntity]:
-        v = (vault or "").strip()
-        if Web3.is_address(v):
-            v = Web3.to_checksum_address(v)
-
+        v = _norm_lower(vault)
         cur = (
             self._col.find({"vault": v})
             .sort("ts_ms", -1)
@@ -66,7 +89,5 @@ class VaultUserEventsRepositoryMongoDB:
         return [VaultUserEventEntity.from_mongo(d) for d in docs if d]
 
     def count_by_vault(self, *, vault: str) -> int:
-        v = (vault or "").strip()
-        if Web3.is_address(v):
-            v = Web3.to_checksum_address(v)
+        v = _norm_lower(vault)
         return int(self._col.count_documents({"vault": v}))

@@ -1,3 +1,5 @@
+# vault_events_repository_mongodb.py
+
 from __future__ import annotations
 
 import time
@@ -11,6 +13,7 @@ from adapters.external.database.helper_repo import sanitize_for_mongo
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_event_entity import VaultEvent
 from core.domain.repositories.vault_events_repository_interface import VaultEventsRepositoryInterface
+from core.services.normalize import _norm_lower
 
 
 class VaultEventsRepository(VaultEventsRepositoryInterface):
@@ -42,15 +45,14 @@ class VaultEventsRepository(VaultEventsRepositoryInterface):
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         event = VaultEvent(
-            dex=dex,
-            alias=alias,
-            kind=kind,
+            dex=_norm_lower(dex),
+            alias=_norm_lower(alias),
+            kind=_norm_lower(kind),
             ts=now_s,
             ts_iso=now_iso,
             payload=payload or {},
         )
 
-        # Optional: keep base timestamps too (ms + iso) for uniformity across collections
         event.created_at = event.now_ms()
         event.created_at_iso = event.now_iso()
         event.updated_at = event.created_at
@@ -66,9 +68,9 @@ class VaultEventsRepository(VaultEventsRepositoryInterface):
         kind: Optional[str] = None,
         limit: int = 2000,
     ) -> List[VaultEvent]:
-        query: Dict[str, Any] = {"dex": dex, "alias": alias}
+        query: Dict[str, Any] = {"dex": _norm_lower(dex), "alias": _norm_lower(alias)}
         if kind is not None:
-            query["kind"] = kind
+            query["kind"] = _norm_lower(kind)
 
         cursor = self._collection.find(query).sort("ts", -1).limit(int(limit))
         out: List[VaultEvent] = []

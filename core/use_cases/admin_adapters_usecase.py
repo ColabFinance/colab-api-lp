@@ -5,41 +5,21 @@ from datetime import UTC, datetime
 
 from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
+from adapters.external.database.dex_pool_repository_mongodb import DexPoolRepositoryMongoDB
 from config import get_settings
 from core.domain.entities.adapter_registry_entity import AdapterRegistryEntity
 from core.domain.enums.adapter_enums import AdapterStatus
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
+from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
 from core.services.tx_service import TxService
 
-
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-
-def _norm(a: str) -> str:
-    return (a or "").strip()
-
-
-def _norm_lower(a: str) -> str:
-    return _norm(a).lower()
-
-
-def _require_nonzero(name: str, addr: str) -> str:
-    addr = _norm(addr)
-    if not addr or _norm_lower(addr) == ZERO_ADDRESS:
-        raise ValueError(f"{name} must not be zero address.")
-    return addr
-
-
-def _fee_bps_str(s: str) -> str:
-    s = (s or "").strip()
-    if not s:
-        raise ValueError("fee_bps is required")
-    if not s.isdigit():
-        raise ValueError("fee_bps must be a numeric string")
-    v = int(s)
-    if v <= 0 or v > 1_000_000:
-        raise ValueError("fee_bps out of range")
-    return str(v)
+from core.services.normalize import (
+    ZERO_ADDRESS,
+    _norm,
+    _norm_lower,
+    _require_nonzero,
+    _fee_bps_str,
+)
 
 
 @dataclass
@@ -47,26 +27,32 @@ class AdminAdaptersUseCase:
     """
     Admin use case to deploy adapters on-chain and persist registry records in MongoDB.
 
-    Security considerations:
-      - Server must validate addresses and enforce uniqueness by (dex, pool).
-      - Deployed contract address is only trusted after receipt is obtained.
-      - Persisted record is validated by re-reading from MongoDB after insert.
+    After deploying, we also update dex_pools.adapter for the matching (chain,dex,pool).
     """
 
     txs: TxService
     repo: AdapterRegistryRepository
+    pool_repo: DexPoolRepository
 
     @classmethod
     def from_settings(cls) -> "AdminAdaptersUseCase":
         s = get_settings()
         repo = AdapterRegistryRepositoryMongoDB()
+        pool_repo = DexPoolRepositoryMongoDB()
+
         try:
             repo.ensure_indexes()
         except Exception:
             pass
+        try:
+            pool_repo.ensure_indexes()
+        except Exception:
+            pass
+
         return cls(
             txs=TxService(s.RPC_URL_DEFAULT),
             repo=repo,
+            pool_repo=pool_repo,
         )
 
     def create_adapter(
@@ -86,49 +72,58 @@ class AdminAdaptersUseCase:
         created_by: str | None = None,
         gas_strategy: str = "buffered",
     ) -> dict:
-        chain = (chain or "").strip().lower()
+        chain = _norm_lower(chain)
         if not chain:
             raise ValueError("chain is required")
-        
-        dex = (dex or "").strip()
+
+        dex = _norm_lower(dex)
         if not dex:
             raise ValueError("dex is required")
 
-        # Uniqueness by (dex, pool)
-        pool_l = _norm_lower(pool)
+        # DB key rule: pool stored/query as lowercase
+        pool_input = _require_nonzero("pool", pool)
+        pool_l = _norm_lower(pool_input)
+
+        # Validate pool exists FIRST
+        pool_row = self.pool_repo.get_by_pool(chain=chain, dex=dex, pool=pool_l)
+        if not pool_row:
+            # backward-compat fallback (old mixed-case docs)
+            pool_row = self.pool_repo.get_by_pool(chain=chain, dex=dex, pool=_norm(pool_input))
+        if not pool_row:
+            raise ValueError("DEX pool not found for this (chain, dex, pool). Create the pool first.")
+
+        # Uniqueness by (chain,dex,pool)
         existing = self.repo.get_by_dex_pool(chain=chain, dex=dex, pool=pool_l)
         if existing:
             raise ValueError("Adapter already exists for this dex+pool.")
 
-        # Contract constructor args
-        pool = _require_nonzero("pool", pool)
-        nfpm = _require_nonzero("nfpm", nfpm)
-        gauge = _norm(gauge)  # may be zero
-        fee_buffer = _require_nonzero("fee_buffer", fee_buffer)
-        
+        # Contract constructor args (onchain ok; DB store lower)
+        nfpm_in = _require_nonzero("nfpm", nfpm)
+        gauge_in = _norm(gauge)  # may be zero
+        fee_buffer_in = _require_nonzero("fee_buffer", fee_buffer)
+
         # Metadata
-        token0 = _require_nonzero("token0", token0)
-        token1 = _require_nonzero("token1", token1)
-        if _norm_lower(token0) == _norm_lower(token1):
+        token0_in = _require_nonzero("token0", token0)
+        token1_in = _require_nonzero("token1", token1)
+        if _norm_lower(token0_in) == _norm_lower(token1_in):
             raise ValueError("token0 and token1 must be different")
 
-        pool_name = (pool_name or "").strip()
+        pool_name = _norm(pool_name)
         if not pool_name:
             raise ValueError("pool_name is required")
 
         fee_bps = _fee_bps_str(fee_bps)
 
-        st = (status or "ACTIVE").strip().upper()
+        st = (_norm(status).upper() or "ACTIVE")
         if st not in ("ACTIVE", "INACTIVE"):
             raise ValueError("status must be ACTIVE or INACTIVE")
 
         # Deploy on-chain (PancakeV3Adapter)
         abi, bytecode = load_contract_from_out("vaults", "PancakeV3Adapter.json")
-
         res = self.txs.deploy(
             abi=abi,
             bytecode=bytecode,
-            ctor_args=(pool, nfpm, gauge, fee_buffer),
+            ctor_args=(pool_input, nfpm_in, gauge_in, fee_buffer_in),
             wait=True,
             gas_strategy=gas_strategy,
         )
@@ -139,15 +134,15 @@ class AdminAdaptersUseCase:
 
         ent = AdapterRegistryEntity(
             chain=chain,
-            address=str(addr),
-            tx_hash=res.get("tx_hash"),
+            address=_norm_lower(str(addr)),
+            tx_hash=_norm_lower(res.get("tx_hash")),
             dex=dex,
             pool=pool_l,
-            nfpm=_norm_lower(nfpm),
-            gauge=_norm_lower(gauge),
-            fee_buffer=_norm_lower(fee_buffer),
-            token0=_norm_lower(token0),
-            token1=_norm_lower(token1),
+            nfpm=_norm_lower(nfpm_in),
+            gauge=_norm_lower(gauge_in),
+            fee_buffer=_norm_lower(fee_buffer_in),
+            token0=_norm_lower(token0_in),
+            token1=_norm_lower(token1_in),
             pool_name=pool_name,
             fee_bps=fee_bps,
             status=AdapterStatus(st),
@@ -160,7 +155,10 @@ class AdminAdaptersUseCase:
         if not persisted or persisted.address.lower() != ent.address.lower():
             raise RuntimeError("Adapter deployed but failed to persist in MongoDB.")
 
-        # Normalize API output like factories
+        updated = self.pool_repo.set_adapter(chain=chain, dex=dex, pool=pool_l, adapter=ent.address)
+        if updated <= 0:
+            raise RuntimeError("Adapter deployed but failed to update dex_pool.adapter.")
+
         res["result"] = {
             "chain": ent.chain,
             "address": ent.address,
@@ -181,10 +179,10 @@ class AdminAdaptersUseCase:
         return res
 
     def list_adapters(self, *, chain: str, limit: int = 200) -> list[dict]:
-        chain = (chain or "").strip().lower()
+        chain = _norm_lower(chain)
         if not chain:
             raise ValueError("chain is required")
-        
+
         out: list[dict] = []
         for e in self.repo.list_all(chain=chain, limit=int(limit)):
             out.append(
