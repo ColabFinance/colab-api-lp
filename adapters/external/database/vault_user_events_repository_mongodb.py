@@ -23,7 +23,7 @@ class VaultUserEventsRepositoryMongoDB:
             self._col = col
             self._db = col.database
         else:
-            self._db = db or get_mongo_db()
+            self._db = db if db is not None else get_mongo_db()
             self._col = self._db[self.COLLECTION_NAME]
         self.ensure_indexes()
 
