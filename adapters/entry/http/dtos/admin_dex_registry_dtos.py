@@ -64,6 +64,8 @@ class CreateDexPoolRequest(BaseModel):
     adapter: Optional[str] = Field(default=None, description="Optional deployed adapter address")
     reward_token: str
     
+    reward_swap_pool: str = Field(default=ZERO, description="Pool used to swap rewards to target token (can be zero)")
+    
     status: DexRegistryStatus = Field(default=DexRegistryStatus.ACTIVE)
 
     @field_validator("chain", "dex")
@@ -82,6 +84,11 @@ class CreateDexPoolRequest(BaseModel):
     @field_validator("gauge")
     @classmethod
     def _addr_gauge(cls, v: str) -> str:
+        return _validate_addr(v, allow_zero=True)
+
+    @field_validator("reward_swap_pool")
+    @classmethod
+    def _addr_reward_swap_pool(cls, v: str) -> str:
         return _validate_addr(v, allow_zero=True)
 
     @field_validator("adapter")

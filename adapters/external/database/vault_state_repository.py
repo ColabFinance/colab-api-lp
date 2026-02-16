@@ -1,3 +1,5 @@
+# vault_state_repository.py
+
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -9,6 +11,7 @@ from adapters.external.database.helper_repo import sanitize_for_mongo
 from adapters.external.database.mongo_client import get_mongo_db
 from core.domain.entities.vault_state_entity import VaultStateDocument
 from core.domain.repositories.vault_state_repository_interface import VaultStateRepositoryInterface
+from core.services.normalize import _norm_lower
 
 
 class VaultStateRepository(VaultStateRepositoryInterface):
@@ -37,23 +40,29 @@ class VaultStateRepository(VaultStateRepositoryInterface):
         )
 
     def _get_state_doc(self, dex: str, alias: str) -> Optional[VaultStateDocument]:
-        doc = self._collection.find_one({"dex": dex, "alias": alias})
+        dex_n = _norm_lower(dex)
+        alias_n = _norm_lower(alias)
+        doc = self._collection.find_one({"dex": dex_n, "alias": alias_n})
         return VaultStateDocument.from_mongo(doc)
 
     def _upsert_state_doc(self, dex: str, alias: str, state: Dict[str, Any]) -> VaultStateDocument:
-        existing = self._collection.find_one({"dex": dex, "alias": alias})
+        dex_n = _norm_lower(dex)
+        alias_n = _norm_lower(alias)
+
+        existing = self._collection.find_one({"dex": dex_n, "alias": alias_n})
 
         if existing:
             entity = VaultStateDocument.from_mongo(existing)
             if entity is None:
                 raise RuntimeError("Failed to parse an existing vault_state document.")
 
+            entity.dex = dex_n
+            entity.alias = alias_n
             entity.state = state
 
             now_ms = entity.now_ms()
             now_iso = entity.now_iso()
 
-            # preserve created_* if present, otherwise set (defensive)
             if entity.created_at is None:
                 entity.created_at = now_ms
             if entity.created_at_iso is None:
@@ -68,7 +77,7 @@ class VaultStateRepository(VaultStateRepositoryInterface):
             )
             return entity
 
-        entity = VaultStateDocument(dex=dex, alias=alias, state=state)
+        entity = VaultStateDocument(dex=dex_n, alias=alias_n, state=state)
 
         now_ms = entity.now_ms()
         now_iso = entity.now_iso()

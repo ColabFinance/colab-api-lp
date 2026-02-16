@@ -1,3 +1,5 @@
+# protocol_fee_collector_repository_mongodb.py
+
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -10,6 +12,7 @@ from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
 from core.domain.entities.protocol_fee_collector_entity import ProtocolFeeCollectorEntity
 from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.protocol_fee_collector_repository_interface import ProtocolFeeCollectorRepository
+from core.services.normalize import _norm_lower
 
 
 class ProtocolFeeCollectorRepositoryMongoDB(ProtocolFeeCollectorRepository):
@@ -37,22 +40,27 @@ class ProtocolFeeCollectorRepositoryMongoDB(ProtocolFeeCollectorRepository):
         self._collection.create_index([("address", 1)], unique=True, name="ux_protocol_fee_collectors_address")
 
     def get_latest(self, *, chain: str) -> Optional[ProtocolFeeCollectorEntity]:
-        doc = self._collection.find_one({"chain": chain}, sort=[("created_at", -1)])
+        doc = self._collection.find_one({"chain": _norm_lower(chain)}, sort=[("created_at", -1)])
         return ProtocolFeeCollectorEntity.from_mongo(doc)
 
     def get_active(self, *, chain: str) -> Optional[ProtocolFeeCollectorEntity]:
-        doc = self._collection.find_one({"chain": chain, "status": FactoryStatus.ACTIVE.value})
+        doc = self._collection.find_one({"chain": _norm_lower(chain), "status": FactoryStatus.ACTIVE.value})
         return ProtocolFeeCollectorEntity.from_mongo(doc)
 
     def insert(self, entity: ProtocolFeeCollectorEntity) -> None:
         entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
+
+        for k in ("chain", "address", "tx_hash", "treasury"):
+            if k in doc and isinstance(doc.get(k), str):
+                doc[k] = _norm_lower(doc.get(k))
+
         self._collection.insert_one(doc)
 
     def set_all_status(self, *, chain: str, status: FactoryStatus) -> int:
-        res = self._collection.update_many({"chain": chain}, {"$set": {"status": status.value}})
+        res = self._collection.update_many({"chain": _norm_lower(chain)}, {"$set": {"status": status.value}})
         return int(res.modified_count)
 
     def list_all(self, *, chain: str, limit: int = 50) -> Sequence[ProtocolFeeCollectorEntity]:
-        cursor = self._collection.find({"chain": chain}, sort=[("created_at", -1)]).limit(int(limit))
+        cursor = self._collection.find({"chain": _norm_lower(chain)}, sort=[("created_at", -1)]).limit(int(limit))
         return [ProtocolFeeCollectorEntity.from_mongo(d) for d in cursor if d]

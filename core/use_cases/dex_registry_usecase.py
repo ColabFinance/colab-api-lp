@@ -5,26 +5,18 @@ from decimal import Decimal, getcontext
 
 from adapters.external.database.dex_registry_repository_mongodb import DexRegistryRepositoryMongoDB
 from adapters.external.database.dex_pool_repository_mongodb import DexPoolRepositoryMongoDB
-
 from core.domain.entities.dex_registry_entity import DexRegistryEntity, DexPoolEntity
 from core.domain.enums.dex_registry_enums import DexRegistryStatus
 from core.domain.repositories.dex_registry_repository_interface import DexRegistryRepository
 from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
 
+from core.services.normalize import _norm, _norm_lower
+
 
 getcontext().prec = 50
 
 
-def _norm(s: str) -> str:
-    return (s or "").strip()
-
-
-def _norm_lower(s: str) -> str:
-    return _norm(s).lower()
-
-
 def _fee_rate_from_bps(bps: int) -> str:
-    # bps / 10000 => string
     return str((Decimal(int(bps)) / Decimal(10_000)).normalize())
 
 
@@ -37,7 +29,6 @@ class DexRegistryUseCase:
     def from_settings(cls) -> "DexRegistryUseCase":
         dex_repo = DexRegistryRepositoryMongoDB()
         pool_repo = DexPoolRepositoryMongoDB()
-
         try:
             dex_repo.ensure_indexes()
         except Exception:
@@ -46,7 +37,6 @@ class DexRegistryUseCase:
             pool_repo.ensure_indexes()
         except Exception:
             pass
-
         return cls(dex_repo=dex_repo, pool_repo=pool_repo)
 
     def list_dexes(self, *, chain: str, limit: int = 200) -> dict:
@@ -99,11 +89,14 @@ class DexRegistryUseCase:
         return {"ok": True, "message": "OK", "data": data}
 
     def get_pool_by_pool(self, *, pool: str) -> dict:
-        pool = _norm(pool)
-        if not pool:
+        pool_l = _norm_lower(pool)
+        if not pool_l:
             raise ValueError("pool is required")
 
-        r = self.pool_repo.get_by_pool_address(pool=pool)
+        r = self.pool_repo.get_by_pool_address(pool=pool_l)
+        if not r:
+            # backward-compat fallback
+            r = self.pool_repo.get_by_pool_address(pool=_norm(pool))
         if not r:
             return {"ok": False, "message": "Pool not found", "data": None}
 

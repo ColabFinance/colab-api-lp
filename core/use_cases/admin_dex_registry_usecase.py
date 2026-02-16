@@ -5,26 +5,18 @@ from decimal import Decimal, getcontext
 
 from adapters.external.database.dex_registry_repository_mongodb import DexRegistryRepositoryMongoDB
 from adapters.external.database.dex_pool_repository_mongodb import DexPoolRepositoryMongoDB
-
 from core.domain.entities.dex_registry_entity import DexRegistryEntity, DexPoolEntity
 from core.domain.enums.dex_registry_enums import DexRegistryStatus
 from core.domain.repositories.dex_registry_repository_interface import DexRegistryRepository
 from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
 
+from core.services.normalize import _norm, _norm_lower, _require_nonzero
+
 
 getcontext().prec = 50
 
 
-def _norm(s: str) -> str:
-    return (s or "").strip()
-
-
-def _norm_lower(s: str) -> str:
-    return _norm(s).lower()
-
-
 def _fee_rate_from_bps(bps: int) -> str:
-    # bps / 10000 => string
     return str((Decimal(int(bps)) / Decimal(10_000)).normalize())
 
 
@@ -37,7 +29,6 @@ class AdminDexRegistryUseCase:
     def from_settings(cls) -> "AdminDexRegistryUseCase":
         dex_repo = DexRegistryRepositoryMongoDB()
         pool_repo = DexPoolRepositoryMongoDB()
-
         try:
             dex_repo.ensure_indexes()
         except Exception:
@@ -46,7 +37,6 @@ class AdminDexRegistryUseCase:
             pool_repo.ensure_indexes()
         except Exception:
             pass
-
         return cls(dex_repo=dex_repo, pool_repo=pool_repo)
 
     def create_dex(
@@ -64,6 +54,8 @@ class AdminDexRegistryUseCase:
         if not dex:
             raise ValueError("dex is required")
 
+        dex_router = _require_nonzero("dex_router", dex_router)
+
         exists = self.dex_repo.get_by_key(chain=chain, dex=dex)
         if exists:
             raise ValueError("DEX already exists for this (chain, dex).")
@@ -71,7 +63,7 @@ class AdminDexRegistryUseCase:
         ent = DexRegistryEntity(
             chain=chain,
             dex=dex,
-            dex_router=dex_router,
+            dex_router=_norm_lower(dex_router),
             status=status,
         )
         self.dex_repo.insert(ent)
@@ -120,7 +112,8 @@ class AdminDexRegistryUseCase:
         pair: str = "",
         symbol: str = "",
         adapter: str | None = None,
-        reward_token: str,
+        reward_token: str = "",
+        reward_swap_pool: str = "0x0000000000000000000000000000000000000000",
         status: DexRegistryStatus = DexRegistryStatus.ACTIVE,
     ) -> dict:
         chain = _norm_lower(chain)
@@ -134,7 +127,19 @@ class AdminDexRegistryUseCase:
         if not parent:
             raise ValueError("DEX registry not found. Create the DEX first.")
 
-        exists = self.pool_repo.get_by_pool(chain=chain, dex=dex, pool=pool)
+        pool_in = _require_nonzero("pool", pool)
+        nfpm_in = _require_nonzero("nfpm", nfpm)
+        token0_in = _require_nonzero("token0", token0)
+        token1_in = _require_nonzero("token1", token1)
+        reward_token_in = _require_nonzero("reward_token", reward_token)
+
+        # gauge/reward_swap_pool may be zero
+        gauge_in = _norm(gauge)
+        reward_swap_pool_in = _norm(reward_swap_pool)
+
+        pool_l = _norm_lower(pool_in)
+
+        exists = self.pool_repo.get_by_pool(chain=chain, dex=dex, pool=pool_l)
         if exists:
             raise ValueError("Pool already exists for this (chain, dex, pool).")
 
@@ -144,18 +149,19 @@ class AdminDexRegistryUseCase:
         ent = DexPoolEntity(
             chain=chain,
             dex=dex,
-            pool=pool,
-            nfpm=nfpm,
-            gauge=gauge,
-            token0=token0,
-            token1=token1,
+            pool=pool_l,
+            nfpm=_norm_lower(nfpm_in),
+            gauge=_norm_lower(gauge_in),
+            token0=_norm_lower(token0_in),
+            token1=_norm_lower(token1_in),
             pair=_norm(pair),
             symbol=_norm(symbol),
             fee_bps=fee_bps_int,
             fee_rate=fee_rate,
-            adapter=adapter,
+            adapter=_norm_lower(adapter) if adapter else None,
             status=status,
-            reward_token=reward_token
+            reward_token=_norm_lower(reward_token_in),
+            reward_swap_pool=_norm_lower(reward_swap_pool_in),
         )
         self.pool_repo.insert(ent)
 
@@ -176,6 +182,7 @@ class AdminDexRegistryUseCase:
                 "fee_rate": ent.fee_rate,
                 "adapter": ent.adapter,
                 "reward_token": ent.reward_token,
+                "reward_swap_pool": ent.reward_swap_pool,
                 "status": ent.status,
                 "created_at": ent.created_at_iso,
             },
@@ -206,6 +213,7 @@ class AdminDexRegistryUseCase:
                 "adapter": r.adapter,
                 "status": r.status,
                 "reward_token": r.reward_token,
+                "reward_swap_pool": getattr(r, "reward_swap_pool", "0x0000000000000000000000000000000000000000"),
                 "created_at": r.created_at_iso,
             }
             for r in rows
