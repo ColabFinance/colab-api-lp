@@ -69,6 +69,13 @@ class VaultUserEventsRepositoryMongoDB:
             "event_type": doc.get("event_type"),
         }
 
+        # IMPORTANT:
+        # Do NOT include updated_at fields inside $setOnInsert, because we also set them in $set,
+        # otherwise Mongo throws ConflictingUpdateOperators (code 40).
+        insert_doc = dict(doc)
+        insert_doc.pop("updated_at", None)
+        insert_doc.pop("updated_at_iso", None)
+        
         saved = self._col.find_one_and_update(
             q,
             {"$setOnInsert": doc, "$set": {"updated_at": entity.now_ms(), "updated_at_iso": entity.now_iso()}},
