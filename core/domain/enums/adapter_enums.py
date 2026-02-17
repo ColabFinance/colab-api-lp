@@ -12,4 +12,4 @@ class AdapterStatus(str, Enum):
     """
 
     ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
+    ARCHIVED_CAN_CREATE_NEW = "ARCHIVED_CAN_CREATE_NEW"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from web3 import Web3
 
 from adapters.chain.artifacts import load_contract_from_out
 from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
@@ -20,6 +21,16 @@ from core.services.normalize import (
     _require_nonzero,
     _fee_bps_str,
 )
+
+
+def _cs_addr(field: str, v: str, *, allow_zero: bool = False) -> str:
+    vv = (v or "").strip()
+    if allow_zero:
+        if not vv or _norm_lower(vv) == ZERO_ADDRESS:
+            return ZERO_ADDRESS
+    if not Web3.is_address(vv):
+        raise ValueError(f"{field} must be a valid EVM address (0x...).")
+    return Web3.to_checksum_address(vv)
 
 
 @dataclass
@@ -102,6 +113,11 @@ class AdminAdaptersUseCase:
         gauge_in = _norm(gauge)  # may be zero
         fee_buffer_in = _require_nonzero("fee_buffer", fee_buffer)
 
+        pool_cs = _cs_addr("pool", pool_input)
+        nfpm_cs = _cs_addr("nfpm", nfpm_in)
+        gauge_cs = _cs_addr("gauge", gauge_in, allow_zero=True)
+        fee_buffer_cs = _cs_addr("fee_buffer", fee_buffer_in)
+
         # Metadata
         token0_in = _require_nonzero("token0", token0)
         token1_in = _require_nonzero("token1", token1)
@@ -115,15 +131,15 @@ class AdminAdaptersUseCase:
         fee_bps = _fee_bps_str(fee_bps)
 
         st = (_norm(status).upper() or "ACTIVE")
-        if st not in ("ACTIVE", "INACTIVE"):
-            raise ValueError("status must be ACTIVE or INACTIVE")
+        if st not in ("ACTIVE", "ARCHIVED_CAN_CREATE_NEW"):
+            raise ValueError("status must be ACTIVE or ARCHIVED_CAN_CREATE_NEW")
 
         # Deploy on-chain (PancakeV3Adapter)
         abi, bytecode = load_contract_from_out("vaults", "PancakeV3Adapter.json")
         res = self.txs.deploy(
             abi=abi,
             bytecode=bytecode,
-            ctor_args=(pool_input, nfpm_in, gauge_in, fee_buffer_in),
+            ctor_args=(pool_cs, nfpm_cs, gauge_cs, fee_buffer_cs),
             wait=True,
             gas_strategy=gas_strategy,
         )
