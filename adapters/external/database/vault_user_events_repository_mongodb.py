@@ -16,7 +16,6 @@ from core.services.normalize import _norm_lower
 
 class VaultUserEventsRepositoryMongoDB:
     COLLECTION_NAME = "vault_user_events"
-    COLLECTION = COLLECTION_NAME
 
     def __init__(self, db: Optional[Database] = None, col: Optional[Collection] = None) -> None:
         if col is not None:

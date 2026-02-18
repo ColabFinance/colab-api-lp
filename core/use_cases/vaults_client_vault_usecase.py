@@ -75,10 +75,10 @@ class VaultClientVaultUseCase:
     @classmethod
     def from_settings(cls) -> "VaultClientVaultUseCase":
         db = get_mongo_db()
-        vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
-        adapter_repo = AdapterRegistryRepositoryMongoDB()
-        dex_pool_repo = DexPoolRepositoryMongoDB()
-        dex_registry_repo = DexRegistryRepositoryMongoDB()
+        vault_repo = VaultRegistryRepositoryMongoDB(db=db)
+        adapter_repo = AdapterRegistryRepositoryMongoDB(db=db)
+        dex_pool_repo = DexPoolRepositoryMongoDB(db=db)
+        dex_registry_repo = DexRegistryRepositoryMongoDB(db=db)
         return cls(
             vault_registry_repo=vault_repo,
             adapter_registry_repo=adapter_repo,
@@ -249,14 +249,6 @@ class VaultClientVaultUseCase:
         
         w3 = Web3(Web3.HTTPProvider(rpc_url))
 
-        # print(rpc_url)
-        # print(w3.eth.chain_id)
-        # print(vault_address)
-
-        # code = w3.eth.get_code(Web3.to_checksum_address(vault_address))
-        # if not code or code == b"":
-        #     raise ValueError("Vault has no bytecode on provided rpc_url (wrong RPC/network?)")
-            
         # validação mínima on-chain (com o provider correto)
         try:
             vault = ClientVaultAdapter(w3, vault_address)

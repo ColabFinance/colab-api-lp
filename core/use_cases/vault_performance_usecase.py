@@ -141,8 +141,8 @@ class VaultPerformanceUseCase:
     @classmethod
     def from_settings(cls) -> "VaultPerformanceUseCase":
         db = get_mongo_db()
-        vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
-        user_events_repo = VaultUserEventsRepositoryMongoDB(db[VaultUserEventsRepositoryMongoDB.COLLECTION])
+        vault_repo = VaultRegistryRepositoryMongoDB(db=db)
+        user_events_repo = VaultUserEventsRepositoryMongoDB(db=db)
         signals_client = SignalsHttpClient.from_settings()
         market_data = MarketDataHttpClient.from_settings()
 
