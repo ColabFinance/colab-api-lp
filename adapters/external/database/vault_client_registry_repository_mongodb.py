@@ -17,8 +17,6 @@ from core.services.normalize import _norm_lower
 
 class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
     COLLECTION_NAME = "vault_registry"
-    # keep old attr for callers that do db[VaultRegistryRepositoryMongoDB.COLLECTION]
-    COLLECTION = COLLECTION_NAME
 
     def __init__(self, db: Optional[Database] = None, col: Optional[Collection] = None) -> None:
         if col is not None:

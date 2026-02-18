@@ -35,7 +35,7 @@ class AutoHarvestCompoundPancakeUseCase:
     @classmethod
     def from_settings(cls) -> "AutoHarvestCompoundPancakeUseCase":
         db = get_mongo_db()
-        repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
+        repo = VaultRegistryRepositoryMongoDB(db=db)
         repo.ensure_indexes()
         return cls(vault_registry_repo=repo)
 

@@ -99,7 +99,7 @@ class AutoRebalancePancakeUseCase:
         txs = TxService(s.RPC_URL_DEFAULT)
 
         db = get_mongo_db()
-        repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
+        repo = VaultRegistryRepositoryMongoDB(db=db)
         repo.ensure_indexes()
 
         return cls(w3=w3, txs=txs, vault_registry_repo=repo)

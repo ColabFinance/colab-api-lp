@@ -231,8 +231,8 @@ class VaultUserEventsUseCase:
     @classmethod
     def from_settings(cls) -> "VaultUserEventsUseCase":
         db = get_mongo_db()
-        vault_repo = VaultRegistryRepositoryMongoDB(db[VaultRegistryRepositoryMongoDB.COLLECTION])
-        events_repo = VaultUserEventsRepositoryMongoDB(db[VaultUserEventsRepositoryMongoDB.COLLECTION])
+        vault_repo = VaultRegistryRepositoryMongoDB(db=db)
+        events_repo = VaultUserEventsRepositoryMongoDB(db=db)
         events_repo.ensure_indexes()
 
         st = get_settings()
