@@ -18,8 +18,12 @@ class VaultUserEventsRepositoryMongoDB:
     COLLECTION_NAME = "vault_user_events"
 
     def __init__(self, db: Optional[Database] = None, col: Optional[Collection] = None) -> None:
-        self._db = db if db is not None else get_mongo_db()
-        self._col = self._db[self.COLLECTION_NAME]
+        if col is not None:
+            self._col = col
+            self._db = col.database
+        else:
+            self._db = db if db is not None else get_mongo_db()
+            self._col = self._db[self.COLLECTION_NAME]
         self.ensure_indexes()
 
     @property
@@ -73,7 +77,7 @@ class VaultUserEventsRepositoryMongoDB:
         
         saved = self._col.find_one_and_update(
             q,
-            {"$setOnInsert": doc, "$set": {"updated_at": entity.now_ms(), "updated_at_iso": entity.now_iso()}},
+            {"$setOnInsert": insert_doc, "$set": {"updated_at": entity.now_ms(), "updated_at_iso": entity.now_iso()}},
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )
