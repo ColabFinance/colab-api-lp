@@ -19,12 +19,8 @@ class VaultRegistryRepositoryMongoDB(VaultRegistryRepositoryInterface):
     COLLECTION_NAME = "vault_registry"
 
     def __init__(self, db: Optional[Database] = None, col: Optional[Collection] = None) -> None:
-        if col is not None:
-            self._collection = col
-            self._db = col.database
-        else:
-            self._db = db if db is not None else get_mongo_db()
-            self._collection = self._db[self.COLLECTION_NAME]
+        self._db = db if db is not None else get_mongo_db()
+        self._collection = self._db[self.COLLECTION_NAME]
         self.ensure_indexes()
 
     @property

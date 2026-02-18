@@ -24,7 +24,7 @@ class VaultStateRepository(VaultStateRepositoryInterface):
     COLLECTION_NAME = "vault_state"
 
     def __init__(self, db: Optional[Database] = None) -> None:
-        self._db: Database = db or get_mongo_db()
+        self._db: Database = db if db is not None else get_mongo_db()
         self._collection: Collection = self._db[self.COLLECTION_NAME]
         self.ensure_indexes()
 
