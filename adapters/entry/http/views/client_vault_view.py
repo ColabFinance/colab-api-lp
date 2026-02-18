@@ -62,7 +62,7 @@ async def register_client_vault(
     use_case: VaultClientVaultUseCase = Depends(get_use_case),
 ):
     try:
-        out = use_case.register_client_vault(
+        out = await use_case.register_client_vault(
             vault_address=body.vault_address,
             strategy_id=body.strategy_id,
             owner=body.owner,

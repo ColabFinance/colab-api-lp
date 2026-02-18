@@ -10,14 +10,13 @@ from web3.contract.contract import Contract
 from web3.exceptions import ContractLogicError, BadFunctionCallOutput
 
 from adapters.chain.client_vault import ClientVaultAdapter
-from adapters.chain.strategy_registry import StrategyRegistryAdapter
-from adapters.chain.vault_factory import VaultFactoryAdapter
 from adapters.external.database.adapter_registry_repository_mongodb import AdapterRegistryRepositoryMongoDB
 from adapters.external.database.dex_pool_repository_mongodb import DexPoolRepositoryMongoDB
 from adapters.external.database.dex_registry_repository_mongodb import DexRegistryRepositoryMongoDB
 from adapters.external.database.mongo_client import get_mongo_db
 from adapters.external.database.vault_client_registry_repository_mongodb import VaultRegistryRepositoryMongoDB
-from config import get_settings
+
+from adapters.external.signals.signals_http_client import SignalsHttpClient
 from core.domain.entities.vault_client_registry_entity import VaultRegistryEntity
 from core.domain.repositories.adapter_registry_repository_interface import AdapterRegistryRepository
 from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
@@ -25,8 +24,6 @@ from core.domain.repositories.dex_registry_repository_interface import DexRegist
 from core.domain.repositories.vault_client_registry_repository_interface import VaultRegistryRepositoryInterface
 
 from core.domain.schemas.vault_inputs import VaultCreateConfigIn
-from core.services.tx_service import TxService
-from core.services.utils import to_json_safe
 from core.services.vault_status_service import ZERO_ADDR, VaultStatusService
 from core.services.web3_cache import get_web3
 
@@ -71,6 +68,7 @@ class VaultClientVaultUseCase:
     adapter_registry_repo: AdapterRegistryRepository
     dex_pool_repo: DexPoolRepository
     dex_registry_repo: DexRegistryRepository
+    signals_http_client: SignalsHttpClient
 
     @classmethod
     def from_settings(cls) -> "VaultClientVaultUseCase":
@@ -79,11 +77,13 @@ class VaultClientVaultUseCase:
         adapter_repo = AdapterRegistryRepositoryMongoDB(db=db)
         dex_pool_repo = DexPoolRepositoryMongoDB(db=db)
         dex_registry_repo = DexRegistryRepositoryMongoDB(db=db)
+        signals_http_client = SignalsHttpClient.from_settings()
         return cls(
             vault_registry_repo=vault_repo,
             adapter_registry_repo=adapter_repo,
             dex_pool_repo=dex_pool_repo,
             dex_registry_repo=dex_registry_repo,
+            signals_http_client=signals_http_client
         )
  
     def _resolve_vault_address(self, alias_or_address: str) -> str:
@@ -215,7 +215,7 @@ class VaultClientVaultUseCase:
             fresh_onchain=fresh_onchain,
         )
 
-    def register_client_vault(
+    async def register_client_vault(
         self,
         *,
         vault_address: str,
@@ -315,6 +315,14 @@ class VaultClientVaultUseCase:
 
         saved = self.vault_registry_repo.insert(entity)
 
+        await self.signals_http_client.link_vault_to_strategy(
+            chain=chain,
+            alias=alias,
+            dex=dex,
+            owner=owner,
+            strategy_id=strategy_id
+        )
+        
         return {
             "alias": alias,
             "mongo_id": saved.id,
