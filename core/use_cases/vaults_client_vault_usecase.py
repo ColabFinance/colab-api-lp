@@ -249,6 +249,10 @@ class VaultClientVaultUseCase:
         
         w3 = Web3(Web3.HTTPProvider(rpc_url))
 
+        print(rpc_url)
+        print(w3.eth.chain_id)
+        print(vault_address)
+
         code = w3.eth.get_code(Web3.to_checksum_address(vault_address))
         if not code or code == b"":
             raise ValueError("Vault has no bytecode on provided rpc_url (wrong RPC/network?)")
