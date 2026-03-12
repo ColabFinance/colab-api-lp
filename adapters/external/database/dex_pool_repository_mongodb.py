@@ -9,9 +9,8 @@ from adapters.external.database.helper_repo import sanitize_for_mongo  # type: i
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
 
 from core.domain.entities.dex_registry_entity import DexPoolEntity
-from core.domain.enums.dex_registry_enums import DexRegistryStatus
+from core.domain.enums.dex_registry_enums import DexRegistryStatus, DexPoolType
 from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
-
 from core.services.normalize import _norm_lower
 
 
@@ -33,8 +32,11 @@ class DexPoolRepositoryMongoDB(DexPoolRepository):
         self._collection.create_index([("pool", 1)], name="ix_dex_pools_pool")
         self._collection.create_index([("status", 1)], name="ix_dex_pools_status")
         self._collection.create_index([("created_at", -1)], name="ix_dex_pools_created_at_desc")
-        self._collection.create_index([("chain", 1), ("dex", 1), ("pool", 1)], unique=True, name="ux_dex_pools_chain_dex_pool")
-
+        self._collection.create_index(
+            [("chain", 1), ("dex", 1), ("pool", 1)],
+            unique=True,
+            name="ux_dex_pools_chain_dex_pool",
+        )
         self._collection.create_index(
             [("adapter", 1)],
             unique=True,
@@ -52,17 +54,85 @@ class DexPoolRepositoryMongoDB(DexPoolRepository):
         entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
 
-        # enforce lowercase storage for keys/addresses
-        for k in ("chain", "dex", "pool", "nfpm", "gauge", "token0", "token1", "adapter", "reward_token", "reward_swap_pool"):
+        for k in (
+            "chain",
+            "dex",
+            "pool",
+            "nfpm",
+            "gauge",
+            "token0",
+            "token1",
+            "adapter",
+            "reward_token",
+            "reward_swap_pool",
+        ):
             if k in doc and isinstance(doc.get(k), str):
                 doc[k] = _norm_lower(doc.get(k))
 
         self._collection.insert_one(doc)
 
+    def update_by_pool(
+        self,
+        *,
+        chain: str,
+        dex: str,
+        pool: str,
+        nfpm: str,
+        gauge: str,
+        token0: str,
+        token1: str,
+        pair: str,
+        symbol: str,
+        fee_bps: int,
+        fee_rate: str,
+        adapter: Optional[str],
+        reward_token: str,
+        reward_swap_pool: str,
+        pool_type: DexPoolType,
+        tick_spacing: Optional[int],
+        status: DexRegistryStatus,
+    ) -> Optional[DexPoolEntity]:
+        current = self.get_by_pool(chain=chain, dex=dex, pool=pool)
+        if current is None:
+            return None
+
+        touched = current.touch_for_update()
+        status_value = status.value if isinstance(status, DexRegistryStatus) else str(status)
+        pool_type_value = pool_type.value if isinstance(pool_type, DexPoolType) else str(pool_type)
+
+        patch = sanitize_for_mongo(
+            {
+                "nfpm": _norm_lower(nfpm),
+                "gauge": _norm_lower(gauge),
+                "token0": _norm_lower(token0),
+                "token1": _norm_lower(token1),
+                "pair": pair,
+                "symbol": symbol,
+                "fee_bps": int(fee_bps),
+                "fee_rate": fee_rate,
+                "adapter": _norm_lower(adapter) if adapter else None,
+                "reward_token": _norm_lower(reward_token),
+                "reward_swap_pool": _norm_lower(reward_swap_pool),
+                "pool_type": pool_type_value,
+                "tick_spacing": int(tick_spacing) if tick_spacing is not None else None,
+                "status": status_value,
+                "updated_at": touched.updated_at,
+                "updated_at_iso": touched.updated_at_iso,
+            }
+        )
+
+        self._collection.update_one(
+            {"chain": _norm_lower(chain), "dex": _norm_lower(dex), "pool": _norm_lower(pool)},
+            {"$set": patch},
+        )
+        return self.get_by_pool(chain=chain, dex=dex, pool=pool)
+
     def list_by_dex(self, *, chain: str, dex: str, limit: int = 500) -> Sequence[DexPoolEntity]:
         cursor = (
-            self._collection.find({"chain": _norm_lower(chain), "dex": _norm_lower(dex)}, sort=[("created_at", -1)])
-            .limit(int(limit))
+            self._collection.find(
+                {"chain": _norm_lower(chain), "dex": _norm_lower(dex)},
+                sort=[("created_at", -1)],
+            ).limit(int(limit))
         )
         return [DexPoolEntity.from_mongo(d) for d in cursor if d]
 
