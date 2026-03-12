@@ -45,6 +45,26 @@ class CreateDexRequest(BaseModel):
         return _validate_addr(v, allow_zero=False)
 
 
+class UpdateDexRequest(BaseModel):
+    chain: str = Field(..., description='Chain key (e.g. "base", "bnb")')
+    dex: str = Field(..., description='DEX key (e.g. "pancake_v3", "uniswap_v3", "aerodrome")')
+    dex_router: str = Field(..., description="DEX router used by ClientVault for swaps")
+    status: DexRegistryStatus = Field(default=DexRegistryStatus.ACTIVE)
+
+    @field_validator("chain", "dex")
+    @classmethod
+    def _norm_lower(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if not v:
+            raise ValueError("Field is required.")
+        return v
+
+    @field_validator("dex_router")
+    @classmethod
+    def _addr_router(cls, v: str) -> str:
+        return _validate_addr(v, allow_zero=False)
+
+
 class CreateDexPoolRequest(BaseModel):
     chain: str
     dex: str
@@ -63,9 +83,8 @@ class CreateDexPoolRequest(BaseModel):
 
     adapter: Optional[str] = Field(default=None, description="Optional deployed adapter address")
     reward_token: str
-    
     reward_swap_pool: str = Field(default=ZERO, description="Pool used to swap rewards to target token (can be zero)")
-    
+
     status: DexRegistryStatus = Field(default=DexRegistryStatus.ACTIVE)
 
     @field_validator("chain", "dex")

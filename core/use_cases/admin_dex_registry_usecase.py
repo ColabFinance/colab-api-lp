@@ -9,7 +9,6 @@ from core.domain.entities.dex_registry_entity import DexRegistryEntity, DexPoolE
 from core.domain.enums.dex_registry_enums import DexRegistryStatus
 from core.domain.repositories.dex_registry_repository_interface import DexRegistryRepository
 from core.domain.repositories.dex_pool_repository_interface import DexPoolRepository
-
 from core.services.normalize import _norm, _norm_lower, _require_nonzero
 
 
@@ -76,7 +75,51 @@ class AdminDexRegistryUseCase:
                 "dex": ent.dex,
                 "dex_router": ent.dex_router,
                 "status": ent.status,
-                "created_at": ent.created_at_iso,
+                "created_at": getattr(ent, "created_at", None),
+                "created_at_iso": getattr(ent, "created_at_iso", None),
+                "updated_at": getattr(ent, "updated_at", None),
+                "updated_at_iso": getattr(ent, "updated_at_iso", None),
+            },
+        }
+
+    def update_dex(
+        self,
+        *,
+        chain: str,
+        dex: str,
+        dex_router: str,
+        status: DexRegistryStatus = DexRegistryStatus.ACTIVE,
+    ) -> dict:
+        chain = _norm_lower(chain)
+        dex = _norm_lower(dex)
+        if not chain:
+            raise ValueError("chain is required")
+        if not dex:
+            raise ValueError("dex is required")
+
+        dex_router = _require_nonzero("dex_router", dex_router)
+
+        updated = self.dex_repo.update_by_key(
+            chain=chain,
+            dex=dex,
+            dex_router=dex_router,
+            status=status,
+        )
+        if not updated:
+            raise ValueError("DEX registry not found.")
+
+        return {
+            "ok": True,
+            "message": "DEX registry updated.",
+            "data": {
+                "chain": updated.chain,
+                "dex": updated.dex,
+                "dex_router": updated.dex_router,
+                "status": updated.status,
+                "created_at": getattr(updated, "created_at", None),
+                "created_at_iso": getattr(updated, "created_at_iso", None),
+                "updated_at": getattr(updated, "updated_at", None),
+                "updated_at_iso": getattr(updated, "updated_at_iso", None),
             },
         }
 
@@ -92,7 +135,10 @@ class AdminDexRegistryUseCase:
                 "dex": r.dex,
                 "dex_router": r.dex_router,
                 "status": r.status,
-                "created_at": r.created_at_iso,
+                "created_at": getattr(r, "created_at", None),
+                "created_at_iso": getattr(r, "created_at_iso", None),
+                "updated_at": getattr(r, "updated_at", None),
+                "updated_at_iso": getattr(r, "updated_at_iso", None),
             }
             for r in rows
         ]
@@ -133,7 +179,6 @@ class AdminDexRegistryUseCase:
         token1_in = _require_nonzero("token1", token1)
         reward_token_in = _require_nonzero("reward_token", reward_token)
 
-        # gauge/reward_swap_pool may be zero
         gauge_in = _norm(gauge)
         reward_swap_pool_in = _norm(reward_swap_pool)
 
@@ -184,7 +229,10 @@ class AdminDexRegistryUseCase:
                 "reward_token": ent.reward_token,
                 "reward_swap_pool": ent.reward_swap_pool,
                 "status": ent.status,
-                "created_at": ent.created_at_iso,
+                "created_at": getattr(ent, "created_at", None),
+                "created_at_iso": getattr(ent, "created_at_iso", None),
+                "updated_at": getattr(ent, "updated_at", None),
+                "updated_at_iso": getattr(ent, "updated_at_iso", None),
             },
         }
 
@@ -214,7 +262,10 @@ class AdminDexRegistryUseCase:
                 "status": r.status,
                 "reward_token": r.reward_token,
                 "reward_swap_pool": getattr(r, "reward_swap_pool", "0x0000000000000000000000000000000000000000"),
-                "created_at": r.created_at_iso,
+                "created_at": getattr(r, "created_at", None),
+                "created_at_iso": getattr(r, "created_at_iso", None),
+                "updated_at": getattr(r, "updated_at", None),
+                "updated_at_iso": getattr(r, "updated_at_iso", None),
             }
             for r in rows
         ]
