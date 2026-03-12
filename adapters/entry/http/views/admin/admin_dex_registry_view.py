@@ -3,8 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
-from adapters.entry.http.dtos.admin_dex_registry_dtos import CreateDexRequest, CreateDexPoolRequest
-
+from adapters.entry.http.dtos.admin_dex_registry_dtos import (
+    CreateDexRequest,
+    CreateDexPoolRequest,
+    UpdateDexRequest,
+)
 from core.use_cases.admin_dex_registry_usecase import AdminDexRegistryUseCase
 
 
@@ -32,6 +35,25 @@ async def create_dex_registry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create dex registry: {exc}") from exc
+
+
+@router.post("/dexes/update")
+async def update_dex_registry(
+    body: UpdateDexRequest,
+    admin: AdminPrincipal = Depends(require_admin),
+    use_case: AdminDexRegistryUseCase = Depends(get_use_case),
+):
+    try:
+        return use_case.update_dex(
+            chain=body.chain,
+            dex=body.dex,
+            dex_router=body.dex_router,
+            status=body.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update dex registry: {exc}") from exc
 
 
 @router.get("/dexes")

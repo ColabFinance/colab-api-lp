@@ -9,8 +9,8 @@ from adapters.external.database.helper_repo import sanitize_for_mongo  # type: i
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
 
 from core.domain.entities.dex_registry_entity import DexRegistryEntity
+from core.domain.enums.dex_registry_enums import DexRegistryStatus
 from core.domain.repositories.dex_registry_repository_interface import DexRegistryRepository
-
 from core.services.normalize import _norm_lower
 
 
@@ -46,6 +46,36 @@ class DexRegistryRepositoryMongoDB(DexRegistryRepository):
                 doc[k] = _norm_lower(doc.get(k))
 
         self._collection.insert_one(doc)
+
+    def update_by_key(
+        self,
+        *,
+        chain: str,
+        dex: str,
+        dex_router: str,
+        status: DexRegistryStatus,
+    ) -> Optional[DexRegistryEntity]:
+        current = self.get_by_key(chain=chain, dex=dex)
+        if current is None:
+            return None
+
+        touched = current.touch_for_update()
+        status_value = status.value if isinstance(status, DexRegistryStatus) else str(status)
+
+        patch = sanitize_for_mongo(
+            {
+                "dex_router": _norm_lower(dex_router),
+                "status": status_value,
+                "updated_at": touched.updated_at,
+                "updated_at_iso": touched.updated_at_iso,
+            }
+        )
+
+        self._collection.update_one(
+            {"chain": _norm_lower(chain), "dex": _norm_lower(dex)},
+            {"$set": patch},
+        )
+        return self.get_by_key(chain=chain, dex=dex)
 
     def list_all(self, *, chain: str, limit: int = 200) -> Sequence[DexRegistryEntity]:
         cursor = self._collection.find({"chain": _norm_lower(chain)}, sort=[("created_at", -1)]).limit(int(limit))
