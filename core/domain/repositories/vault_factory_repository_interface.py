@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence
 
-from core.domain.entities.factory_entities import VaultFactoryEntity
+from core.domain.entities.vault_factory_entity import VaultFactoryEntity
 from core.domain.enums.factory_enums import FactoryStatus
 
 

@@ -3,38 +3,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from adapters.chain.artifacts import load_contract_from_out
-from adapters.external.database.vault_fee_buffer_repository_mongodb import VaultFeeBufferRepositoryMongoDB
+from adapters.external.database.strategy_registry_repository_mongodb import StrategyRepositoryMongoDB
 from config import get_settings
-from core.domain.entities.vault_fee_buffer_entity import VaultFeeBufferEntity
+from core.domain.entities.strategy_registry_entity import StrategyRegistryEntity
 from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.enums.tx_enums import GasStrategy
-from core.domain.repositories.vault_fee_buffer_repository_interface import VaultFeeBufferRepository
+from core.domain.repositories.strategy_registry_repository_interface import StrategyRepository
 from core.services.tx_service import TxService
 
 
 @dataclass
-class AdminVaultFeeBufferUseCase:
-    """
-    Admin-only use case responsible for deploying VaultFeeBuffer on-chain
-    and persisting deployment records in MongoDB.
-    """
-
+class AdminStrategyFactoryUseCase:
     txs: TxService
-    repo: VaultFeeBufferRepository
+    strategy_repo: StrategyRepository
 
     @classmethod
-    def from_settings(cls) -> "AdminVaultFeeBufferUseCase":
+    def from_settings(cls) -> "AdminStrategyFactoryUseCase":
         s = get_settings()
-        repo = VaultFeeBufferRepositoryMongoDB()
+        strategy_repo = StrategyRepositoryMongoDB()
 
         try:
-            repo.ensure_indexes()
+            strategy_repo.ensure_indexes()
         except Exception:
             pass
 
         return cls(
             txs=TxService(s.RPC_URL_DEFAULT),
-            repo=repo,
+            strategy_repo=strategy_repo,
         )
 
     def _ensure_can_create(self, latest_status: FactoryStatus | None) -> None:
@@ -42,10 +37,10 @@ class AdminVaultFeeBufferUseCase:
             return
         if latest_status == FactoryStatus.ARCHIVED_CAN_CREATE_NEW:
             return
-        raise ValueError("A VaultFeeBuffer already exists and does not allow creating a new one.")
+        raise ValueError("A factory already exists and does not allow creating a new one.")
 
     @staticmethod
-    def _serialize_record(ent: VaultFeeBufferEntity | None) -> dict | None:
+    def _serialize_record(ent: StrategyRegistryEntity | None) -> dict | None:
         if ent is None:
             return None
 
@@ -62,7 +57,7 @@ class AdminVaultFeeBufferUseCase:
             "updated_at_iso": getattr(ent, "updated_at_iso", None),
         }
 
-    def create_vault_fee_buffer(
+    def create_strategy_registry(
         self,
         *,
         chain: str,
@@ -73,10 +68,10 @@ class AdminVaultFeeBufferUseCase:
         if not chain:
             raise ValueError("chain is required")
 
-        latest = self.repo.get_latest(chain=chain)
+        latest = self.strategy_repo.get_latest(chain=chain)
         self._ensure_can_create(latest.status if latest else None)
 
-        abi, bytecode = load_contract_from_out("vaults", "VaultFeeBuffer.json")
+        abi, bytecode = load_contract_from_out("vaults", "StrategyRegistry.json")
 
         res = self.txs.deploy(
             abi=abi,
@@ -90,25 +85,25 @@ class AdminVaultFeeBufferUseCase:
         if not addr:
             raise RuntimeError("Deploy succeeded but contract_address is missing.")
 
-        self.repo.set_all_status(chain=chain, status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
+        self.strategy_repo.set_all_status(chain=chain, status=FactoryStatus.ARCHIVED_CAN_CREATE_NEW)
 
-        ent = VaultFeeBufferEntity(
+        ent = StrategyRegistryEntity(
             chain=chain,
             address=str(addr),
             status=FactoryStatus.ACTIVE,
             tx_hash=res.get("tx_hash"),
             owner=initial_owner,
         )
-        self.repo.insert(ent)
+        self.strategy_repo.insert(ent)
 
-        active = self.repo.get_active(chain=chain)
+        active = self.strategy_repo.get_active(chain=chain)
         if not active or active.address.lower() != ent.address.lower():
-            raise RuntimeError("VaultFeeBuffer deployed but failed to persist as ACTIVE in MongoDB.")
+            raise RuntimeError("Factory deployed but failed to persist as ACTIVE in MongoDB.")
 
         res["result"] = self._serialize_record(active)
         return res
 
-    def list_vault_fee_buffers(
+    def list_strategy_registries(
         self,
         *,
         chain: str,
@@ -120,12 +115,12 @@ class AdminVaultFeeBufferUseCase:
 
         limit = max(1, int(limit))
 
-        active = self.repo.get_active(chain=chain)
-        history = self.repo.list_all(chain=chain, limit=limit)
+        active = self.strategy_repo.get_active(chain=chain)
+        history = self.strategy_repo.list_all(chain=chain, limit=limit)
 
         return {
             "ok": True,
-            "message": "Vault fee buffer records fetched successfully.",
+            "message": "Strategy registry records fetched successfully.",
             "result": {
                 "active": self._serialize_record(active),
                 "history": [self._serialize_record(item) for item in history],

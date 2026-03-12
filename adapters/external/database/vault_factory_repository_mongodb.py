@@ -1,5 +1,3 @@
-# vault_factory_repository_mongodb.py
-
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -9,7 +7,7 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.factory_entities import VaultFactoryEntity
+from core.domain.entities.vault_factory_entity import VaultFactoryEntity
 from core.domain.enums.factory_enums import FactoryStatus
 from core.domain.repositories.vault_factory_repository_interface import VaultFactoryRepository
 from core.services.normalize import _norm_lower
@@ -51,7 +49,15 @@ class VaultFactoryRepositoryMongoDB(VaultFactoryRepository):
         entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
 
-        for k in ("chain", "address", "tx_hash"):
+        for k in (
+            "chain",
+            "address",
+            "tx_hash",
+            "owner",
+            "strategy_registry",
+            "executor",
+            "fee_collector",
+        ):
             if k in doc and isinstance(doc.get(k), str):
                 doc[k] = _norm_lower(doc.get(k))
 

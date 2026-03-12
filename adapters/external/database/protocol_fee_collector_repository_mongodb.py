@@ -1,5 +1,3 @@
-# protocol_fee_collector_repository_mongodb.py
-
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -51,7 +49,7 @@ class ProtocolFeeCollectorRepositoryMongoDB(ProtocolFeeCollectorRepository):
         entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
 
-        for k in ("chain", "address", "tx_hash", "treasury"):
+        for k in ("chain", "address", "tx_hash", "owner", "treasury"):
             if k in doc and isinstance(doc.get(k), str):
                 doc[k] = _norm_lower(doc.get(k))
 

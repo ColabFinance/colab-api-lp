@@ -1,5 +1,3 @@
-# strategy_factory_repository_mongodb.py
-
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -9,9 +7,9 @@ from pymongo.database import Database
 
 from adapters.external.database.helper_repo import sanitize_for_mongo  # type: ignore
 from adapters.external.database.mongo_client import get_mongo_db  # type: ignore
-from core.domain.entities.factory_entities import StrategyFactoryEntity
+from core.domain.entities.strategy_registry_entity import StrategyRegistryEntity
 from core.domain.enums.factory_enums import FactoryStatus
-from core.domain.repositories.strategy_factory_repository_interface import StrategyRepository
+from core.domain.repositories.strategy_registry_repository_interface import StrategyRepository
 from core.services.normalize import _norm_lower
 
 
@@ -39,19 +37,19 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         self._collection.create_index([("created_at", -1)], name="ix_strategy_factories_created_at_desc")
         self._collection.create_index([("address", 1)], unique=True, name="ux_strategy_factories_address")
 
-    def get_latest(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
+    def get_latest(self, *, chain: str) -> Optional[StrategyRegistryEntity]:
         doc = self._collection.find_one({"chain": _norm_lower(chain)}, sort=[("created_at", -1)])
-        return StrategyFactoryEntity.from_mongo(doc)
+        return StrategyRegistryEntity.from_mongo(doc)
 
-    def get_active(self, *, chain: str) -> Optional[StrategyFactoryEntity]:
+    def get_active(self, *, chain: str) -> Optional[StrategyRegistryEntity]:
         doc = self._collection.find_one({"chain": _norm_lower(chain), "status": FactoryStatus.ACTIVE.value})
-        return StrategyFactoryEntity.from_mongo(doc)
+        return StrategyRegistryEntity.from_mongo(doc)
 
-    def insert(self, entity: StrategyFactoryEntity) -> None:
+    def insert(self, entity: StrategyRegistryEntity) -> None:
         entity = entity.touch_for_insert()
         doc = sanitize_for_mongo(entity.to_mongo())
 
-        for k in ("chain", "address", "tx_hash"):
+        for k in ("chain", "address", "tx_hash", "owner"):
             if k in doc and isinstance(doc.get(k), str):
                 doc[k] = _norm_lower(doc.get(k))
 
@@ -61,6 +59,6 @@ class StrategyRepositoryMongoDB(StrategyRepository):
         res = self._collection.update_many({"chain": _norm_lower(chain)}, {"$set": {"status": status.value}})
         return int(res.modified_count)
 
-    def list_all(self, *, chain: str, limit: int = 50) -> Sequence[StrategyFactoryEntity]:
+    def list_all(self, *, chain: str, limit: int = 50) -> Sequence[StrategyRegistryEntity]:
         cursor = self._collection.find({"chain": _norm_lower(chain)}, sort=[("created_at", -1)]).limit(int(limit))
-        return [StrategyFactoryEntity.from_mongo(d) for d in cursor if d]
+        return [StrategyRegistryEntity.from_mongo(d) for d in cursor if d]

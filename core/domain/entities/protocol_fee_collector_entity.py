@@ -21,6 +21,7 @@ class ProtocolFeeCollectorEntity(MongoEntity):
     status: FactoryStatus
     tx_hash: Optional[str] = None
 
+    owner: Optional[str] = None
     treasury: str
     protocol_fee_bps: int
 
