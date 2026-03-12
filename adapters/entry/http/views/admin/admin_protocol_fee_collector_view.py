@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from adapters.entry.http.views.admin.admin_auth import require_admin, AdminPrincipal
 from adapters.entry.http.dtos.admin_protocol_fee_collector_dtos import CreateProtocolFeeCollectorRequest
@@ -41,3 +41,18 @@ async def create_protocol_fee_collector(
         ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create protocol fee collector: {exc}") from exc
+
+
+@router.get("/protocol-fee-collector")
+async def list_protocol_fee_collectors(
+    chain: str = Query(..., description='Chain key (e.g. "base", "bnb")'),
+    limit: int = Query(50, ge=1, le=200),
+    _: AdminPrincipal = Depends(require_admin),
+    use_case: AdminProtocolFeeCollectorUseCase = Depends(get_use_case),
+):
+    try:
+        return use_case.list_protocol_fee_collectors(chain=chain, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list protocol fee collectors: {exc}") from exc

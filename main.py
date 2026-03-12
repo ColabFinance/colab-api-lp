@@ -8,7 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from adapters.external.database.vault_events_repository_mongodb import VaultEventsRepository
 from adapters.external.database.vault_state_repository import VaultStateRepository
-from adapters.entry.http.views.admin.admin_view import router as admin_router
+from adapters.entry.http.views.admin.admin_strategy_registry_view import router as admin_strategy_router
+from adapters.entry.http.views.admin.admin_vault_factory_view import router as admin_vault_factory_router
+from adapters.entry.http.views.admin.admin_adapters_view import router as admin_adapters_router
+from adapters.entry.http.views.admin.admin_dex_registry_view import router as admin_dex_registry_router
 from adapters.entry.http.views.admin.admin_protocol_fee_collector_view import router as admin_protocol_fee_collector_router
 from adapters.entry.http.views.admin.admin_vault_fee_buffer_view import router as admin_vault_fee_buffer_router
 from adapters.entry.http.views.admin.admin_chain_registry_view import router as admin_chain_registry_router
@@ -71,7 +74,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
         
-    app.include_router(admin_router, prefix="/api")
+    app.include_router(admin_strategy_router, prefix="/api")
+    app.include_router(admin_vault_factory_router, prefix="/api")
+    app.include_router(admin_adapters_router, prefix="/api")
+    app.include_router(admin_dex_registry_router, prefix="/api")
     app.include_router(admin_vault_fee_buffer_router, prefix="/api")
     app.include_router(admin_chain_registry_router, prefix="/api")
     app.include_router(admin_protocol_fee_collector_router, prefix="/api")

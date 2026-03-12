@@ -44,6 +44,26 @@ class AdminProtocolFeeCollectorUseCase:
             return
         raise ValueError("A protocol fee collector already exists and does not allow creating a new one.")
 
+    @staticmethod
+    def _serialize_record(ent: ProtocolFeeCollectorEntity | None) -> dict | None:
+        if ent is None:
+            return None
+
+        status = ent.status.value if hasattr(ent.status, "value") else ent.status
+        return {
+            "chain": ent.chain,
+            "address": ent.address,
+            "status": status,
+            "tx_hash": getattr(ent, "tx_hash", None),
+            "owner": getattr(ent, "owner", None),
+            "treasury": getattr(ent, "treasury", None),
+            "protocol_fee_bps": getattr(ent, "protocol_fee_bps", None),
+            "created_at": getattr(ent, "created_at", None),
+            "created_at_iso": getattr(ent, "created_at_iso", None),
+            "updated_at": getattr(ent, "updated_at", None),
+            "updated_at_iso": getattr(ent, "updated_at_iso", None),
+        }
+
     def create_protocol_fee_collector(
         self,
         *,
@@ -87,6 +107,7 @@ class AdminProtocolFeeCollectorUseCase:
             address=str(addr),
             status=FactoryStatus.ACTIVE,
             tx_hash=res.get("tx_hash"),
+            owner=initial_owner,
             treasury=treasury,
             protocol_fee_bps=int(protocol_fee_bps),
         )
@@ -96,12 +117,29 @@ class AdminProtocolFeeCollectorUseCase:
         if not active or active.address.lower() != ent.address.lower():
             raise RuntimeError("ProtocolFeeCollector deployed but failed to persist as ACTIVE in MongoDB.")
 
-        res["result"] = {
-            "chain": ent.chain,
-            "address": ent.address,
-            "status": ent.status,
-            "created_at": ent.created_at_iso,
-            "treasury": ent.treasury,
-            "protocol_fee_bps": ent.protocol_fee_bps,
-        }
+        res["result"] = self._serialize_record(active)
         return res
+
+    def list_protocol_fee_collectors(
+        self,
+        *,
+        chain: str,
+        limit: int = 50,
+    ) -> dict:
+        chain = (chain or "").strip().lower()
+        if not chain:
+            raise ValueError("chain is required")
+
+        limit = max(1, int(limit))
+
+        active = self.repo.get_active(chain=chain)
+        history = self.repo.list_all(chain=chain, limit=limit)
+
+        return {
+            "ok": True,
+            "message": "Protocol fee collector records fetched successfully.",
+            "result": {
+                "active": self._serialize_record(active),
+                "history": [self._serialize_record(item) for item in history],
+            },
+        }
