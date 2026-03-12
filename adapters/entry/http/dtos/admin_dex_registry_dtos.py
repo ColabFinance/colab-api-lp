@@ -5,7 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 from web3 import Web3
 
-from core.domain.enums.dex_registry_enums import DexRegistryStatus, DexPoolType
+from core.domain.enums.dex_registry_enums import DexRegistryStatus
 
 
 ZERO = "0x0000000000000000000000000000000000000000"
@@ -80,8 +80,6 @@ class CreateDexPoolRequest(BaseModel):
     symbol: str = Field(default="")
 
     fee_bps: int = Field(..., ge=0, le=100_000)
-    tick_spacing: Optional[int] = Field(default=None, ge=0)
-    pool_type: DexPoolType = Field(default=DexPoolType.CONCENTRATED)
 
     adapter: Optional[str] = Field(default=None, description="Optional deployed adapter address")
     reward_token: str
@@ -97,7 +95,7 @@ class CreateDexPoolRequest(BaseModel):
             raise ValueError("Field is required.")
         return v
 
-    @field_validator("pool", "nfpm", "token0", "token1", "reward_token")
+    @field_validator("pool", "nfpm", "token0", "token1")
     @classmethod
     def _addr_nonzero(cls, v: str) -> str:
         return _validate_addr(v, allow_zero=False)
@@ -129,7 +127,3 @@ class CreateDexPoolRequest(BaseModel):
         if token0 and token0 == (v or "").lower():
             raise ValueError("token0 and token1 cannot be the same.")
         return v
-
-
-class UpdateDexPoolRequest(CreateDexPoolRequest):
-    pass

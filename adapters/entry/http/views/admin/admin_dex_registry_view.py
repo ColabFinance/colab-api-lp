@@ -7,7 +7,6 @@ from adapters.entry.http.dtos.admin_dex_registry_dtos import (
     CreateDexRequest,
     CreateDexPoolRequest,
     UpdateDexRequest,
-    UpdateDexPoolRequest,
 )
 from core.use_cases.admin_dex_registry_usecase import AdminDexRegistryUseCase
 
@@ -93,45 +92,12 @@ async def create_dex_pool(
             adapter=body.adapter,
             reward_token=body.reward_token,
             reward_swap_pool=body.reward_swap_pool,
-            pool_type=body.pool_type,
-            tick_spacing=body.tick_spacing,
             status=body.status,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create dex pool: {exc}") from exc
-
-
-@router.post("/dexes/pools/update")
-async def update_dex_pool(
-    body: UpdateDexPoolRequest,
-    admin: AdminPrincipal = Depends(require_admin),
-    use_case: AdminDexRegistryUseCase = Depends(get_use_case),
-):
-    try:
-        return use_case.update_pool(
-            chain=body.chain,
-            dex=body.dex,
-            pool=body.pool,
-            nfpm=body.nfpm,
-            gauge=body.gauge,
-            token0=body.token0,
-            token1=body.token1,
-            fee_bps=body.fee_bps,
-            pair=body.pair,
-            symbol=body.symbol,
-            adapter=body.adapter,
-            reward_token=body.reward_token,
-            reward_swap_pool=body.reward_swap_pool,
-            pool_type=body.pool_type,
-            tick_spacing=body.tick_spacing,
-            status=body.status,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update dex pool: {exc}") from exc
 
 
 @router.get("/dexes/pools")

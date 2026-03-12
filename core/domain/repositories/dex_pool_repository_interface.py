@@ -1,47 +1,20 @@
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence
 
 from core.domain.entities.dex_registry_entity import DexPoolEntity
-from core.domain.enums.dex_registry_enums import DexRegistryStatus, DexPoolType
+from core.domain.enums.dex_registry_enums import DexRegistryStatus
 
 
 class DexPoolRepository(ABC):
-    @abstractmethod
-    def ensure_indexes(self) -> None:
-        raise NotImplementedError
-
     @abstractmethod
     def get_by_pool(self, *, chain: str, dex: str, pool: str) -> Optional[DexPoolEntity]:
         raise NotImplementedError
 
     @abstractmethod
     def insert(self, entity: DexPoolEntity) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def update_by_pool(
-        self,
-        *,
-        chain: str,
-        dex: str,
-        pool: str,
-        nfpm: str,
-        gauge: str,
-        token0: str,
-        token1: str,
-        pair: str,
-        symbol: str,
-        fee_bps: int,
-        fee_rate: str,
-        adapter: Optional[str],
-        reward_token: str,
-        reward_swap_pool: str,
-        pool_type: DexPoolType,
-        tick_spacing: Optional[int],
-        status: DexRegistryStatus,
-    ) -> Optional[DexPoolEntity]:
         raise NotImplementedError
 
     @abstractmethod
@@ -54,6 +27,10 @@ class DexPoolRepository(ABC):
 
     @abstractmethod
     def set_adapter(self, *, chain: str, dex: str, pool: str, adapter: str) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def ensure_indexes(self) -> None:
         raise NotImplementedError
 
     @abstractmethod
