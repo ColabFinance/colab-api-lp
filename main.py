@@ -15,6 +15,7 @@ from adapters.entry.http.views.admin.admin_dex_registry_view import router as ad
 from adapters.entry.http.views.admin.admin_protocol_fee_collector_view import router as admin_protocol_fee_collector_router
 from adapters.entry.http.views.admin.admin_vault_fee_buffer_view import router as admin_vault_fee_buffer_router
 from adapters.entry.http.views.admin.admin_chain_registry_view import router as admin_chain_registry_router
+from adapters.entry.http.views.admin.admin_onchain_config_view import router as admin_onchain_config_router
 from adapters.entry.http.views.vault_user_events_view import router as vaults_user_events_router
 from adapters.entry.http.views.dex_registry_view import router as dex_registry_router
 from adapters.entry.http.views.auto_rebalance_pancake_view import router as auto_rebalance_pancake_router
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_vault_fee_buffer_router, prefix="/api")
     app.include_router(admin_chain_registry_router, prefix="/api")
     app.include_router(admin_protocol_fee_collector_router, prefix="/api")
+    app.include_router(admin_onchain_config_router, prefix="/api")
     app.include_router(vault_performance_router, prefix="/api")
     app.include_router(dex_registry_router, prefix="/api")
     app.include_router(auto_rebalance_pancake_router, prefix="/api")
