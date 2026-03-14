@@ -9,8 +9,6 @@ from adapters.entry.http.dtos.vaults_client_vault_dtos import (
     CompoundConfigUpdateRequest,
     RewardSwapConfigUpdateRequest,
 )
-from adapters.external.signals.signals_http_client import SignalsHttpClient
-from core.services.exceptions import TransactionRevertedError
 from core.use_cases.vaults_client_vault_usecase import VaultClientVaultUseCase
 
 router = APIRouter(prefix="/vaults", tags=["vaults-client-vault"])
@@ -21,6 +19,38 @@ def get_use_case() -> VaultClientVaultUseCase:
 
 
 @router.get(
+    "/explore",
+    response_model=dict,
+    summary="Lightweight DB-only vault listing for Explore page (no onchain status/performance reads)",
+)
+async def list_vaults_explore(
+    owner: str | None = Query(None, description="Optional wallet to tag vaults as is_mine"),
+    chain: str | None = Query(None, description="Optional: base|bnb|ethereum|polygon|arbitrum|optimism"),
+    dex: str | None = Query(None, description="Optional dex key"),
+    q: str | None = Query(None, description="Optional text search over alias/name/address"),
+    active_only: bool | None = Query(None, description="Optional DB-only active filter"),
+    limit: int = Query(500, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    use_case: VaultClientVaultUseCase = Depends(get_use_case),
+):
+    try:
+        data = use_case.list_explore_registry(
+            owner=owner,
+            chain=chain,
+            dex=dex,
+            query=q,
+            active_only=active_only,
+            limit=limit,
+            offset=offset,
+        )
+        return {"ok": True, "message": "ok", "data": data}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list vaults explore: {exc}") from exc
+
+
+@router.get(
     "/{alias_or_address}/status",
     response_model=VaultStatusOut,
     summary="Read-only full status for a given vault (accepts address in {alias_or_address})",
@@ -28,11 +58,19 @@ def get_use_case() -> VaultClientVaultUseCase:
 async def get_status(
     alias_or_address: str,
     debug_timing: bool = Query(False, description="Print per-step timings on server logs"),
+    fresh_onchain: bool = Query(
+        False,
+        description="Bypass short-lived read caches and force a fresh onchain read",
+    ),
     use_case: VaultClientVaultUseCase = Depends(get_use_case),
 ):
     t0 = perf_counter()
     try:
-        res = use_case.get_status(alias_or_address=alias_or_address, debug_timing=debug_timing)
+        res = use_case.get_status(
+            alias_or_address=alias_or_address,
+            debug_timing=debug_timing,
+            fresh_onchain=fresh_onchain,
+        )
         total_ms = (perf_counter() - t0) * 1000.0
 
         if debug_timing:
