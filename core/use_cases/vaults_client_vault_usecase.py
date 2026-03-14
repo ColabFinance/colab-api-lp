@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
-import json
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, Optional, List
 
 from web3 import Web3
 from web3.contract.contract import Contract
@@ -49,6 +48,95 @@ def _try_get(obj: Any, key: str, default=None):
         return obj.get(key, default)
     return getattr(obj, key, default)
 
+ZERO_ADDR_HEX = "0x0000000000000000000000000000000000000000"
+STABLE_SYMBOLS = {
+    "usdc",
+    "usdt",
+    "dai",
+    "usde",
+    "susde",
+    "fdusd",
+    "pyusd",
+    "usdbc",
+    "frax",
+    "gusd",
+    "lusd",
+    "tusd",
+}
+
+
+def _is_zero_address(addr: Optional[str]) -> bool:
+    if not addr:
+        return True
+    return str(addr).strip().lower() in {"", ZERO_ADDR_HEX}
+
+
+def _format_fee_tier_label(fee_bps: Optional[str]) -> Optional[str]:
+    if fee_bps is None:
+        return None
+
+    try:
+        fee_tier = int(str(fee_bps).strip())
+    except Exception:
+        return None
+
+    if fee_tier <= 0:
+        return None
+
+    text = f"{fee_tier / 10000:.2f}".rstrip("0").rstrip(".")
+    return f"{text}%"
+
+
+def _split_pool_name(pool_name: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    if not pool_name:
+        return None, None
+
+    clean = str(pool_name).strip().replace("-", "/")
+    if "/" not in clean:
+        return None, None
+
+    left, right = clean.split("/", 1)
+    left = left.strip().upper() or None
+    right = right.strip().upper() or None
+    return left, right
+
+
+def _build_display_name(
+    *,
+    raw_name: Optional[str],
+    pool_name: Optional[str],
+    fee_bps: Optional[str],
+    alias: Optional[str],
+    address: Optional[str],
+) -> str:
+    raw = (raw_name or "").strip()
+    if raw and "%" in raw:
+        return raw
+
+    fee_label = _format_fee_tier_label(fee_bps)
+
+    if pool_name:
+        pair = str(pool_name).replace("/", "-").upper().strip()
+        return f"{pair} {fee_label}".strip() if fee_label else pair
+
+    if raw:
+        return raw
+
+    return (alias or address or "vault").strip()
+
+
+def _pair_type_from_symbols(
+    token0_symbol: Optional[str],
+    token1_symbol: Optional[str],
+) -> str:
+    if (
+        token0_symbol
+        and token1_symbol
+        and token0_symbol.lower() in STABLE_SYMBOLS
+        and token1_symbol.lower() in STABLE_SYMBOLS
+    ):
+        return "stable"
+    return "volatile"
 
 @dataclass
 class VaultClientVaultUseCase:
@@ -361,6 +449,142 @@ class VaultClientVaultUseCase:
             offset=offset_i,
         )
 
+    def list_explore_registry(
+        self,
+        *,
+        owner: Optional[str] = None,
+        chain: Optional[str] = None,
+        dex: Optional[str] = None,
+        query: Optional[str] = None,
+        active_only: Optional[bool] = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        collection = getattr(self.vault_registry_repo, "collection", None)
+        if collection is None:
+            raise ValueError("Vault registry collection is not available")
+
+        q: Dict[str, Any] = {}
+
+        chain_n = _norm_slug(chain) if chain else None
+        dex_n = _norm_slug(dex) if dex else None
+        owner_n = (owner or "").strip().lower() if owner else None
+
+        if chain_n:
+            q["chain"] = chain_n
+        if dex_n:
+            q["dex"] = dex_n
+        if active_only is not None:
+            q["is_active"] = bool(active_only)
+
+        needle = (query or "").strip().lower()
+        if needle:
+            rx = {"$regex": re.escape(needle)}
+            q["$or"] = [
+                {"alias": rx},
+                {"name": rx},
+                {"address": rx},
+                {"par_token": rx},
+                {"description": rx},
+            ]
+
+        limit_i = max(1, min(int(limit or 500), 1000))
+        offset_i = max(0, int(offset or 0))
+
+        docs = list(
+            collection.find(q)
+            .sort("created_at", -1)
+            .skip(offset_i)
+            .limit(limit_i)
+        )
+
+        items: List[Dict[str, Any]] = []
+
+        for raw in docs:
+            v = VaultRegistryEntity.from_mongo(raw)
+            cfg = getattr(v, "config", None)
+
+            chain_val = _norm_slug(getattr(v, "chain", None) or chain_n or "")
+            dex_val = _norm_slug(getattr(v, "dex", None) or dex_n or "")
+
+            adapter_addr = _try_get(cfg, "adapter")
+            pool_addr = _try_get(cfg, "pool")
+            gauge_addr = _try_get(cfg, "gauge")
+
+            adapter_doc = None
+            if adapter_addr and Web3.is_address(str(adapter_addr)):
+                try:
+                    adapter_doc = self.adapter_registry_repo.get_by_address(address=str(adapter_addr))
+                except Exception:
+                    adapter_doc = None
+
+            pool_doc = None
+            if pool_addr and chain_val and dex_val:
+                try:
+                    pool_doc = self.dex_pool_repo.get_by_pool(
+                        chain=chain_val,
+                        dex=dex_val,
+                        pool=str(pool_addr),
+                    )
+                except Exception:
+                    pool_doc = None
+
+            token0_address = _try_get(adapter_doc, "token0", None) or _try_get(pool_doc, "token0", None)
+            token1_address = _try_get(adapter_doc, "token1", None) or _try_get(pool_doc, "token1", None)
+
+            pool_name = _try_get(adapter_doc, "pool_name", None)
+            fee_bps = _try_get(adapter_doc, "fee_bps", None)
+
+            if _is_zero_address(gauge_addr):
+                gauge_addr = _try_get(adapter_doc, "gauge", None) or _try_get(pool_doc, "gauge", None)
+
+            token0_symbol, token1_symbol = _split_pool_name(pool_name)
+
+            items.append(
+                {
+                    "id": getattr(v, "alias", None) or getattr(v, "address", None),
+                    "alias": getattr(v, "alias", None),
+                    "name": _build_display_name(
+                        raw_name=getattr(v, "name", None),
+                        pool_name=pool_name,
+                        fee_bps=fee_bps,
+                        alias=getattr(v, "alias", None),
+                        address=getattr(v, "address", None),
+                    ),
+                    "address": getattr(v, "address", None),
+                    "owner": getattr(v, "owner", None),
+                    "strategy_id": int(getattr(v, "strategy_id", 0) or 0),
+                    "chain": chain_val,
+                    "dex": dex_val,
+                    "pool": pool_addr,
+                    "adapter": adapter_addr,
+                    "gauge": gauge_addr,
+                    "token0_address": token0_address,
+                    "token1_address": token1_address,
+                    "token0_symbol": token0_symbol,
+                    "token1_symbol": token1_symbol,
+                    "pool_name": pool_name,
+                    "fee_bps": str(fee_bps) if fee_bps is not None else None,
+                    "has_gauge": not _is_zero_address(gauge_addr),
+                    "is_active": bool(getattr(v, "is_active", False)),
+                    "is_mine": bool(
+                        owner_n and str(getattr(v, "owner", "")).lower() == owner_n
+                    ),
+                    "pair_type": _pair_type_from_symbols(token0_symbol, token1_symbol),
+                    "status": "active" if bool(getattr(v, "is_active", False)) else "paused",
+                    # TODO: preencher a partir de cache leve (vault_state / performance snapshot),
+                    # sem chamar status/performance pesado em lote.
+                    "tvl_usd": None,
+                    "tvl_change_24h_pct": None,
+                    "apr_pct": None,
+                    "apy_pct": None,
+                    "range_status": None,
+                    "my_position_usd": None,
+                }
+            )
+
+        return items
+    
     def update_daily_harvest_config_in_registry(
         self,
         *,
